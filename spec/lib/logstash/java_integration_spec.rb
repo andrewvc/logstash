@@ -82,6 +82,24 @@ describe "Java integration" do
   context "Java::JavaUtil::Collection" do
     subject{Java::JavaUtil::ArrayList.new(initial_array)}
 
+    context "when inspecting" do
+      let(:items) { [:a, {:b => :c}]}
+      subject { java.util.ArrayList.new(items)  }
+
+      it "should include the contents of the Collection" do
+        #require 'pry'; binding.pry
+        expect(subject.inspect).to include(items.inspect)
+      end
+
+      it "should include the class name" do
+        expect(subject.inspect).to include("ArrayList")
+      end
+
+      it "should include the hash code of the collection" do
+        expect(subject.inspect).to include(subject.hashCode.to_s)
+      end
+    end
+
     context "when deleting a unique instance" do
       let(:initial_array) {["foo", "bar"]}
 
