@@ -14,6 +14,11 @@ class LogStash::Agent < Clamp::Command
     I18n.t("logstash.agent.flag.config"),
     :attribute_name => :config_path
 
+  option ["-x", "--queue"], "CONFIG_QUEUE",
+         "Queue Implementation",
+         :attribute_name => :queue_impl,
+         :default => "SizedQueue"
+
   option "-e", "CONFIG_STRING",
     I18n.t("logstash.agent.flag.config-string",
            :default_input => DEFAULT_INPUT, :default_output => DEFAULT_OUTPUT),
@@ -145,6 +150,7 @@ class LogStash::Agent < Clamp::Command
       configure_logging(log_file)
     end
 
+    pipeline.configure("queue_impl", queue_impl)
     pipeline.configure("filter-workers", filter_workers)
 
     # Stop now if we are only asking for a config test.

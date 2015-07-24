@@ -33,14 +33,6 @@ class LogStash::Pipeline
       raise
     end
 
-    @input_to_filter = SizedQueue.new(20)
-
-    # If no filters, pipe inputs directly to outputs
-    if !filters?
-      @filter_to_output = @input_to_filter
-    else
-      @filter_to_output = SizedQueue.new(20)
-    end
     @settings = {
       "filter-workers" => 1,
     }
@@ -76,6 +68,17 @@ class LogStash::Pipeline
 
   def run
     @run_mutex.synchronize{@started = true}
+
+    queue_klass = Kernel.const_get(@settings["queue_impl"])
+
+    @input_to_filter = queue_klass.new(20)
+
+    # If no filters, pipe inputs directly to outputs
+    if !filters?
+      @filter_to_output = @input_to_filter
+    else
+      @filter_to_output = queue_klass.new(20)
+    end
 
     # synchronize @input_threads between run and shutdown
     @run_mutex.synchronize{start_inputs}
