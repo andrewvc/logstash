@@ -3,7 +3,7 @@ require "logstash/namespace"
 require "logstash/logging"
 
 require "thread" # for SizedQueue
-class LogStash::SizedQueue < SizedQueue
+class EphemeralQueue < SizedQueue
   # TODO(sissel): Soon will implement push/pop stats, etc
 
   def initialize(name, size)
