@@ -6,7 +6,7 @@ require "thread" # for SizedQueue
 class LogStash::SizedQueue < SizedQueue
   # TODO(sissel): Soon will implement push/pop stats, etc
 
-  def initialize(name, size)
+  def initialize(size)
     super(size)
   end
 

@@ -9,8 +9,7 @@ require "logstash/filters/base"
 require "logstash/inputs/base"
 require "logstash/outputs/base"
 require "logstash/util/reporter"
-require "logstash/queues/chronicle_queue"
-require "logstash/queues/ephemeral_queue"
+require "logstash/queues/elastic_queue"
 
 class LogStash::Pipeline
 
@@ -73,13 +72,14 @@ class LogStash::Pipeline
 
     queue_klass = Kernel.const_get(@settings["queue_impl"])
 
-    @input_to_filter = queue_klass.new(:input_to_filter, 20)
+    @input_to_filter = queue_klass.new(:i_to_f, 20)
 
     # If no filters, pipe inputs directly to outputs
     if !filters?
       @filter_to_output = @input_to_filter
     else
-      @filter_to_output = queue_klass.new(:output_to_filter, 20)
+      @filter_to_output = SizedQueue.new(20)
+      #@filter_to_output = queue_klass.new(:f_to_o, 20)
     end
 
     # synchronize @input_threads between run and shutdown
@@ -159,7 +159,7 @@ class LogStash::Pipeline
   def start_filters
     @filters.each(&:register)
     @filter_threads = @settings["filter-workers"].times.collect do
-      Thread.new { filterworker }
+      @input_to_filter.start_worker() {|event| filterworker_once(event) }
     end
 
     @flusher_thread = Thread.new { Stud.interval(5) { @input_to_filter.push(LogStash::FLUSH) } }
@@ -213,27 +213,10 @@ class LogStash::Pipeline
   end # def inputworker
 
   def filterworker
-    LogStash::Util::set_thread_name("|worker")
-    @input_to_filter
-
     begin
       while true
         event = @input_to_filter.pop
-
-        case event
-        when LogStash::Event
-          # filter_func returns all filtered events, including cancelled ones
-          filter_func(event).each { |e| @filter_to_output.push(e) unless e.cancelled? }
-          @input_to_filter.ack
-        when LogStash::FlushEvent
-          # handle filter flushing here so that non threadsafe filters (thus only running one filterworker)
-          # don't have to deal with thread safety implementing the flush method
-          flush_filters_to_output!
-        when LogStash::ShutdownEvent
-          # pass it down to any other filterworker and stop this worker
-          @input_to_filter.push(event)
-          break
-        end
+        filterworker_once(event)
       end
     rescue => e
       @logger.error("Exception in filterworker", "exception" => e, "backtrace" => e.backtrace)
@@ -241,6 +224,27 @@ class LogStash::Pipeline
 
     @filters.each(&:teardown)
   end # def filterworker
+
+  def filterworker_once(event)
+    case event
+      when LogStash::Event
+        # filter_func returns all filtered events, including cancelled ones
+        r = filter_func(event).each { |e| @filter_to_output.push(e) unless e.cancelled? }
+        r
+      when LogStash::FlushEvent
+        if true # Temporarily disable flushing
+        # handle filter flushing here so that non threadsafe filters (thus only running one filterworker)
+        # don't have to deal with thread safety implementing the flush method
+        flush_filters_to_output!
+
+        end
+        event
+      when LogStash::ShutdownEvent
+        # pass it down to any other filterworker and stop this worker
+        @input_to_filter.push(event)
+        event
+    end
+  end
 
   def outputworker
     LogStash::Util::set_thread_name(">output")
@@ -250,7 +254,6 @@ class LogStash::Pipeline
       event = @filter_to_output.pop
       break if event == LogStash::SHUTDOWN
       output_func(event)
-      @filter_to_output.ack
     end # while true
 
     @outputs.each do |output|
