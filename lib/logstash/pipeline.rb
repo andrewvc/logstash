@@ -178,7 +178,7 @@ class LogStash::Pipeline
     # Doing this here lets us guarantee that once a 'push' onto the synchronized queue succeeds
     # it can be saved to disk in a fast shutdown
     set_current_thread_inflight_batch(batch)
-    19.times do |t|
+    39.times do |t|
       event = t==0 ? @input_queue.take : @input_queue.poll(50)
       # Exit early so each thread only gets one copy of this
       # This is necessary to ensure proper shutdown!
