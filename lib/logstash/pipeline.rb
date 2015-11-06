@@ -125,8 +125,11 @@ class LogStash::Pipeline
             # queues
             input_batch = @input_queue_pop_mutex.synchronize { take_event_batch }
             running = !input_batch.include?(LogStash::SHUTDOWN)
+
+            #TODO: Should we handle exceptions raised here? What should the behavior be? Just keep going?
             filtered_batch = filter_event_batch(input_batch)
-            output_event_batch(filtered_batch)
+
+            output_func(filtered_batch)
             inflight_batches_synchronize { set_current_thread_inflight_batch(nil) }
           end
         end
@@ -199,10 +202,6 @@ class LogStash::Pipeline
     @logger.error("Exception in filterworker, the pipeline stopped processing new events, please check your filter configuration and restart Logstash.",
                   "exception" => e, "backtrace" => e.backtrace)
     raise
-  end
-
-  def output_event_batch(batch)
-    output_func(batch)
   end
 
   def wait_inputs
