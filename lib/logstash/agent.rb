@@ -177,7 +177,7 @@ class LogStash::Agent < Clamp::Command
   def shutdown(pipeline)
     pipeline.shutdown do
       InflightEventsReporter.logger = @logger
-      InflightEventsReporter.start(pipeline.input_to_filter, pipeline.filter_to_output, pipeline.outputs)
+      InflightEventsReporter.start(pipeline)
     end
   end
 

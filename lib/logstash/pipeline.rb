@@ -15,7 +15,7 @@ require "logstash/util/defaults_printer"
 require "logstash/util/wrapped_synchronous_queue"
 
 class LogStash::Pipeline
-  attr_reader :inputs, :filters, :outputs, :input_to_filter, :filter_to_output
+  attr_reader :inputs, :filters, :outputs, :worker_threads, :events_consumed, :events_emitted
 
   def initialize(configstr)
     @logger = Cabin::Channel.get(LogStash)
@@ -43,6 +43,8 @@ class LogStash::Pipeline
     end
 
     @input_queue = LogStash::Util::WrappedSynchronousQueue.new
+    @events_emitted = Concurrent::AtomicFixnum.new(0)
+    @events_consumed = Concurrent::AtomicFixnum.new(0)
 
     # We generally only want one thread at a time able to access pop/take/poll operations
     # from this queue. We also depend on this to be able to block consumers while we snapshot
@@ -86,7 +88,9 @@ class LogStash::Pipeline
     @logger.info("Pipeline started")
     @logger.terminal("Logstash startup completed")
 
+    @logger.info("Will run till input threads stopped")
     wait_inputs
+    @logger.info("Inputs stopped")
 
     shutdown_workers
 
@@ -118,12 +122,15 @@ class LogStash::Pipeline
 
       @settings["filter-workers"].times do |t|
         @worker_threads << Thread.new do
-          LogStash::Util.set_thread_name(">worker#{t}")
+          thread_name = ">worker#{t}"
+          LogStash::Util.set_thread_name(thread_name)
+
           running = true
           while running
             # We synchronize this access to ensure that we can snapshot even partially consumed
             # queues
             input_batch = @input_queue_pop_mutex.synchronize { take_event_batch }
+            @events_consumed.increment(input_batch.size)
             running = !input_batch.include?(LogStash::SHUTDOWN)
 
             #TODO: Should we handle exceptions raised here? What should the behavior be? Just keep going?
@@ -131,6 +138,7 @@ class LogStash::Pipeline
 
             output_func(filtered_batch)
             inflight_batches_synchronize { set_current_thread_inflight_batch(nil) }
+            @events_emitted.increment(filtered_batch.size)
           end
         end
       end
@@ -275,7 +283,9 @@ class LogStash::Pipeline
 
     before_stop.call if block_given?
 
+    @logger.info "Closing inputs"
     @inputs.each(&:do_stop)
+    @logger.info "Closed inputs"
   end # def shutdown
 
   def plugin(plugin_type, name, *args)

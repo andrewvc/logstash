@@ -5,6 +5,7 @@ require "logstash/plugin"
 require "logstash/namespace"
 require "logstash/config/mixin"
 require "logstash/util/wrapped_synchronous_queue"
+require "concurrent/atomic/atomic_fixnum"
 
 class LogStash::Outputs::Base < LogStash::Plugin
   include LogStash::Config::Mixin
@@ -24,7 +25,7 @@ class LogStash::Outputs::Base < LogStash::Plugin
   # Note that this setting may not be useful for all outputs.
   config :workers, :validate => :number, :default => 1
 
-  attr_reader :worker_plugins, :worker_queue
+  attr_reader :worker_plugins, :available_workers, :workers, :single_worker_mutex
 
   public
   def workers_not_supported(message=nil)
@@ -83,21 +84,21 @@ class LogStash::Outputs::Base < LogStash::Plugin
   end # def handle
 
   # To be overriden in implementations
-  def receive_multi(events)
+  def multi_receive(events)
     events.each {|event|
       receive(event)
     }
   end
 
   # Not to be overriden by plugin authors!
-  def handle_multi(events)
-    @single_worker_mutex.synchronize { receive_multi(events) }
+  def multi_handle(events)
+    @single_worker_mutex.synchronize { multi_receive(events) }
   end
 
   def handle_worker(events)
     worker = @available_workers.pop
     begin
-      worker.handle_multi(events)
+      worker.multi_receive(events)
     ensure
       @available_workers.push(worker)
     end
