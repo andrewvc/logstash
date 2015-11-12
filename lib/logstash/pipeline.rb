@@ -81,6 +81,7 @@ class LogStash::Pipeline
   end
 
   def run
+    LogStash::Util.set_thread_name(">lsipeline")
     @logger.terminal(LogStash::Util::DefaultsPrinter.print(@settings))
 
     start_workers
@@ -89,20 +90,23 @@ class LogStash::Pipeline
     @logger.terminal("Logstash startup completed")
 
     @logger.info("Will run till input threads stopped")
+    #InflightEventsReporter.logger = @logger
+    #InflightEventsReporter.start(self)
     wait_inputs
     @logger.info("Inputs stopped")
 
+    puts "WORKER SHUT"
     shutdown_workers
 
+    puts "WORKER WAITTT"
     @worker_threads.each do |t|
+      puts "WORKER WAIT #{t}"
       @logger.debug("Shutdown waiting for worker thread #{t}")
       t.join
     end
 
     @filters.each(&:do_close)
     @outputs.each(&:do_close)
-
-    dump_inflight("/tmp/ls_current_batches_post_close")
 
     @logger.info("Pipeline shutdown complete.")
     @logger.terminal("Logstash shutdown completed")
@@ -136,7 +140,15 @@ class LogStash::Pipeline
             #TODO: Should we handle exceptions raised here? What should the behavior be? Just keep going?
             filtered_batch = filter_event_batch(input_batch)
 
-            output_func(filtered_batch)
+            filtered_batch.reduce(Hash.new {|h,k| h[k] = []}) do |outputs_events, event|
+              output_func(event).each do |output|
+                outputs_events[output] << event
+              end
+              outputs_events
+            end.each do |output,events|
+              output.multi_handle(events)
+            end
+
             inflight_batches_synchronize { set_current_thread_inflight_batch(nil) }
             @events_emitted.increment(filtered_batch.size)
           end
@@ -163,7 +175,6 @@ class LogStash::Pipeline
   end
 
   def shutdown_workers
-    dump_inflight("/tmp/ls_current_batches")
     # Each worker will receive this exactly once!
     @worker_threads.each do
       @logger.debug("Pushing shutdown")
@@ -186,7 +197,7 @@ class LogStash::Pipeline
     # Doing this here lets us guarantee that once a 'push' onto the synchronized queue succeeds
     # it can be saved to disk in a fast shutdown
     set_current_thread_inflight_batch(batch)
-    39.times do |t|
+    80.times do |t|
       event = t==0 ? @input_queue.take : @input_queue.poll(50)
       # Exit early so each thread only gets one copy of this
       # This is necessary to ensure proper shutdown!
@@ -198,8 +209,13 @@ class LogStash::Pipeline
   end
 
   def filter_event_batch(batch)
-    filterable = batch.select {|e| e.is_a?LogStash::Event}
-    filter_func(filterable).select {|e| !e.cancelled?}
+    batch.reduce([]) do |acc,e|
+      if e.is_a?(LogStash::Event)
+        filtered = filter_func(e)
+        filtered.each {|fe| acc << fe unless fe.cancelled?}
+      end
+      acc
+    end
   rescue Exception => e
     # Plugins authors should manage their own exceptions in the plugin code
     # but if an exception is raised up to the worker thread they are considered
@@ -242,7 +258,7 @@ class LogStash::Pipeline
     begin
       plugin.run(@input_queue)
     rescue => e
-      # if plugin is stopping, ignore uncatched exceptions and exit worker
+      # if plugin is stop
       if plugin.stop?
         @logger.debug("Input plugin raised exception during shutdown, ignoring it.",
                       :plugin => plugin.class.config_name, :exception => e,
@@ -292,5 +308,25 @@ class LogStash::Pipeline
     args << {} if args.empty?
     klass = LogStash::Plugin.lookup(plugin_type, name)
     return klass.new(*args)
+  end
+
+
+  # for backward compatibility in devutils for the rspec helpers, this method is not used
+  # in the pipeline anymore.
+  def filter(event, &block)
+     # filter_func returns all filtered events, including cancelled ones
+     filter_func(event).each { |e| block.call(e) }
+  end
+
+
+  # perform filters flush and yeild flushed event to the passed block
+  # @param options [Hash]
+  # @option options [Boolean] :final => true to signal a final shutdown flush
+  def flush_filters(options = {}, &block)
+    flushers = options[:final] ? @shutdown_flushers : @periodic_flushers
+
+    flushers.each do |flusher|
+      flusher.call(options, &block)
+    end
   end
 end # class Pipeline

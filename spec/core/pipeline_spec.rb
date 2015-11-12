@@ -99,8 +99,8 @@ context "close" do
         pipeline.run
 
         expect(pipeline.outputs.size ).to eq(1)
-        expect(pipeline.outputs.first.worker_plugins.size ).to eq(1)
-        expect(pipeline.outputs.first.worker_plugins.first.num_closes ).to eq(1)
+        expect(pipeline.outputs.first.available_workers.size ).to eq(1)
+        expect(pipeline.outputs.first.available_workers.first.num_closes ).to eq(1)
       end
 
       it "should call output close correctly with output workers" do
@@ -109,7 +109,7 @@ context "close" do
 
         expect(pipeline.outputs.size ).to eq(1)
         expect(pipeline.outputs.first.num_closes).to eq(0)
-        pipeline.outputs.first.worker_plugins.each do |plugin|
+        pipeline.outputs.first.available_workers.each do |plugin|
           expect(plugin.num_closes ).to eq(1)
         end
       end
