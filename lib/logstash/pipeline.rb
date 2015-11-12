@@ -95,12 +95,9 @@ class LogStash::Pipeline
     wait_inputs
     @logger.info("Inputs stopped")
 
-    puts "WORKER SHUT"
     shutdown_workers
 
-    puts "WORKER WAITTT"
     @worker_threads.each do |t|
-      puts "WORKER WAIT #{t}"
       @logger.debug("Shutdown waiting for worker thread #{t}")
       t.join
     end
