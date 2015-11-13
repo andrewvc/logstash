@@ -28,7 +28,7 @@ class LogStash::Agent < Clamp::Command
   option ["-b", "--batchsize"], "SIZE",
     I18n.t("logstash.agent.flag.batchsize"),
     :attribute_name => :batch_size,
-    :default => 500, &:to_i
+    :default => 125, &:to_i
 
   option ["-x", "--batch_poll_wait"], "MILLISECONDS",
     I18n.t("logstash.agent.flag.batch_poll_wait"),

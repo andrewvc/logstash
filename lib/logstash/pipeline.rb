@@ -55,7 +55,7 @@ class LogStash::Pipeline
 
     @settings = {
       "pipeline-workers" => LogStash::Config::CpuCoreStrategy.fifty_percent,
-      "batch-size" => 500,
+      "batch-size" => 125,
       "batch-poll-wait" => 50 # in milliseconds
     }
 
@@ -194,11 +194,13 @@ class LogStash::Pipeline
   # Take an array of events and send them to the correct output
   def output_batch(batch)
     batch.reduce(Hash.new { |h, k| h[k] = [] }) do |outputs_events, event|
+      # We ask the AST to tell us which outputs to send each event to
       output_func(event).each do |output|
         outputs_events[output] << event
       end
       outputs_events
     end.each do |output, events|
+      # Once we have a mapping of outputs => [events] we can execute them
       output.multi_handle(events)
     end
   end
