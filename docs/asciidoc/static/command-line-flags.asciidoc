@@ -15,8 +15,8 @@ Logstash has the following flags. You can use the `--help` flag to display this 
  If not input is specified, 'stdin { type => stdin }' is default. If no output
  is specified, 'stdout { codec => rubydebug }}' is default.
 
--w, --filterworkers COUNT
- Sets the number of filter workers to run (default: 1)
+-w, --pipelineworkers COUNT
+ Sets the number of pipeline workers to run (default: 1)
 
 -l, --log FILE
  Log to a given path. Default is to log to stdout

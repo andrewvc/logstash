@@ -20,10 +20,20 @@ class LogStash::Agent < Clamp::Command
            :default_input => DEFAULT_INPUT, :default_output => DEFAULT_OUTPUT),
     :default => "", :attribute_name => :config_string
 
-  option ["-w", "--filterworkers"], "COUNT",
-    I18n.t("logstash.agent.flag.filterworkers"),
-    :attribute_name => :filter_workers,
+  option ["-w", "--pipelineworkers"], "COUNT",
+    I18n.t("logstash.agent.flag.pipelineworkers"),
+    :attribute_name => :pipeline_workers,
     :default => LogStash::Config::CpuCoreStrategy.fifty_percent, &:to_i
+
+  option ["-b", "--batchsize"], "SIZE",
+    I18n.t("logstash.agent.flag.batchsize"),
+    :attribute_name => :batch_size,
+    :default => 500, &:to_i
+
+  option ["-x", "--batch_poll_wait"], "MILLISECONDS",
+    I18n.t("logstash.agent.flag.batch_poll_wait"),
+    :attribute_name => :batch_poll_wait,
+    :default => 50, &:to_i
 
   option ["-l", "--log"], "FILE",
     I18n.t("logstash.agent.flag.log"),
@@ -143,7 +153,9 @@ class LogStash::Agent < Clamp::Command
       configure_logging(log_file)
     end
 
-    pipeline.configure("filter-workers", filter_workers)
+    pipeline.configure("pipeline-workers", pipeline_workers)
+    pipeline.configure("batch-size", batch_size)
+    pipeline.configure("batch-poll-wait", batch_poll_wait)
 
     # Stop now if we are only asking for a config test.
     if config_test?

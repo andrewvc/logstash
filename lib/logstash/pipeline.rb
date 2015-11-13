@@ -54,7 +54,9 @@ class LogStash::Pipeline
     @input_threads = []
 
     @settings = {
-      "filter-workers" => LogStash::Config::CpuCoreStrategy.fifty_percent
+      "pipeline-workers" => LogStash::Config::CpuCoreStrategy.fifty_percent,
+      "batch-size" => 500,
+      "batch-poll-wait" => 50 # in milliseconds
     }
 
     # @ready requires thread safety since it is typically polled from outside the pipeline thread
@@ -66,7 +68,7 @@ class LogStash::Pipeline
   end
 
   def configure(setting, value)
-    if setting == "filter-workers" && value > 1
+    if setting == "pipeline-workers" && value > 1
       # Abort if we have any filters that aren't threadsafe
       plugins = @filters.select { |f| !f.threadsafe? }.collect { |f| f.class.config_name }
       if !plugins.size.zero?
@@ -114,10 +116,17 @@ class LogStash::Pipeline
       @outputs.each {|o| o.register }
       @filters.each {|f| f.register}
 
-      @settings["filter-workers"].times do |t|
+      pipeline_workers = @settings["pipeline-workers"]
+      batch_size = @settings['batch-size']
+      batch_poll_wait = @settings['batch-poll-wait']
+      @logger.info("Starting pipeline",
+                   :id => self.object_id,
+                   :settings => @settings)
+
+      pipeline_workers.times do |t|
         @worker_threads << Thread.new do
           LogStash::Util.set_thread_name(">worker#{t}")
-          worker_loop
+          worker_loop(batch_size, batch_poll_wait)
         end
       end
     ensure
@@ -129,11 +138,12 @@ class LogStash::Pipeline
 
   # Main body of what a worker threda does
   # Repeatedly takes batches off the queu, filters, then outputs them
-  def worker_loop
+  def worker_loop(batch_size, batch_poll_wait)
     running = true
+
     while running
       # To understand the purpose behind this synchronize please read the body of take_batch
-      input_batch = @input_queue_pop_mutex.synchronize { take_batch }
+      input_batch = @input_queue_pop_mutex.synchronize { take_batch(batch_size, batch_poll_wait) }
       @events_consumed.increment(input_batch.size)
       running = !input_batch.include?(LogStash::SHUTDOWN)
 
@@ -144,14 +154,14 @@ class LogStash::Pipeline
     end
   end
 
-  def take_batch()
+  def take_batch(batch_size, batch_poll_wait)
     batch = []
     # Since this is externally synchronized in `worker_look` wec can guarantee that the visibility of an insight batch
     # guaranteed to be a full batch not a partial batch
     set_current_thread_inflight_batch(batch)
 
-    80.times do |t|
-      event = t==0 ? @input_queue.take : @input_queue.poll(50)
+    batch_size.times do |t|
+      event = t==0 ? @input_queue.take : @input_queue.poll(batch_poll_wait)
       # Exit early so each thread only gets one copy of this
       # This is necessary to ensure proper shutdown!
       next if event.nil?
