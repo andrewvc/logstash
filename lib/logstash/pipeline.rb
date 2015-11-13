@@ -90,20 +90,13 @@ class LogStash::Pipeline
     @logger.terminal("Logstash startup completed")
 
     @logger.info("Will run till input threads stopped")
-    #InflightEventsReporter.logger = @logger
-    #InflightEventsReporter.start(self)
+
+    # Block until all inputs have stopped
+    # Generally this happens if SIGINT is sent and `shutdown` is called from an external thread
     wait_inputs
     @logger.info("Inputs stopped")
 
     shutdown_workers
-
-    @worker_threads.each do |t|
-      @logger.debug("Shutdown waiting for worker thread #{t}")
-      t.join
-    end
-
-    @filters.each(&:do_close)
-    @outputs.each(&:do_close)
 
     @logger.info("Pipeline shutdown complete.")
     @logger.terminal("Logstash shutdown completed")
@@ -123,32 +116,8 @@ class LogStash::Pipeline
 
       @settings["filter-workers"].times do |t|
         @worker_threads << Thread.new do
-          thread_name = ">worker#{t}"
-          LogStash::Util.set_thread_name(thread_name)
-
-          running = true
-          while running
-            # We synchronize this access to ensure that we can snapshot even partially consumed
-            # queues
-            input_batch = @input_queue_pop_mutex.synchronize { take_event_batch }
-            @events_consumed.increment(input_batch.size)
-            running = !input_batch.include?(LogStash::SHUTDOWN)
-
-            #TODO: Should we handle exceptions raised here? What should the behavior be? Just keep going?
-            filtered_batch = filter_event_batch(input_batch)
-
-            filtered_batch.reduce(Hash.new {|h,k| h[k] = []}) do |outputs_events, event|
-              output_func(event).each do |output|
-                outputs_events[output] << event
-              end
-              outputs_events
-            end.each do |output,events|
-              output.multi_handle(events)
-            end
-
-            inflight_batches_synchronize { set_current_thread_inflight_batch(nil) }
-            @events_emitted.increment(filtered_batch.size)
-          end
+          LogStash::Util.set_thread_name(">worker#{t}")
+          worker_loop
         end
       end
     ensure
@@ -158,42 +127,29 @@ class LogStash::Pipeline
     end
   end
 
-  def dump_inflight(file_path)
-    inflight_batches_synchronize do |batches|
-      File.open(file_path, "w") do |f|
-        batches.values.each do |batch|
-          next unless batch
-          batch.each do |e|
-            f.write(LogStash::Json.dump(e))
-          end
-        end
-      end
+  # Main body of what a worker threda does
+  # Repeatedly takes batches off the queu, filters, then outputs them
+  def worker_loop
+    running = true
+    while running
+      # To understand the purpose behind this synchronize please read the body of take_batch
+      input_batch = @input_queue_pop_mutex.synchronize { take_batch }
+      @events_consumed.increment(input_batch.size)
+      running = !input_batch.include?(LogStash::SHUTDOWN)
+
+      filtered = filter_batch(input_batch)
+      output_batch(filtered)
+
+      inflight_batches_synchronize { set_current_thread_inflight_batch(nil) }
     end
   end
 
-  def shutdown_workers
-    # Each worker will receive this exactly once!
-    @worker_threads.each do
-      @logger.debug("Pushing shutdown")
-      @input_queue.push(LogStash::SHUTDOWN)
-    end
-  end
-
-  def set_current_thread_inflight_batch(batch)
-    @inflight_batches[Thread.current] = batch
-  end
-
-  def inflight_batches_synchronize
-    @input_queue_pop_mutex.synchronize do
-      yield(@inflight_batches)
-    end
-  end
-
-  def take_event_batch()
+  def take_batch()
     batch = []
-    # Doing this here lets us guarantee that once a 'push' onto the synchronized queue succeeds
-    # it can be saved to disk in a fast shutdown
+    # Since this is externally synchronized in `worker_look` wec can guarantee that the visibility of an insight batch
+    # guaranteed to be a full batch not a partial batch
     set_current_thread_inflight_batch(batch)
+
     80.times do |t|
       event = t==0 ? @input_queue.take : @input_queue.poll(50)
       # Exit early so each thread only gets one copy of this
@@ -205,7 +161,7 @@ class LogStash::Pipeline
     batch
   end
 
-  def filter_event_batch(batch)
+  def filter_batch(batch)
     batch.reduce([]) do |acc,e|
       if e.is_a?(LogStash::Event)
         filtered = filter_func(e)
@@ -223,6 +179,41 @@ class LogStash::Pipeline
     @logger.error("Exception in filterworker, the pipeline stopped processing new events, please check your filter configuration and restart Logstash.",
                   "exception" => e, "backtrace" => e.backtrace)
     raise
+  end
+
+  # Take an array of events and send them to the correct output
+  def output_batch(batch)
+    batch.reduce(Hash.new { |h, k| h[k] = [] }) do |outputs_events, event|
+      output_func(event).each do |output|
+        outputs_events[output] << event
+      end
+      outputs_events
+    end.each do |output, events|
+      output.multi_handle(events)
+    end
+  end
+
+  def set_current_thread_inflight_batch(batch)
+    @inflight_batches[Thread.current] = batch
+  end
+
+  def inflight_batches_synchronize
+    @input_queue_pop_mutex.synchronize do
+      yield(@inflight_batches)
+    end
+  end
+
+  def dump_inflight(file_path)
+    inflight_batches_synchronize do |batches|
+      File.open(file_path, "w") do |f|
+        batches.values.each do |batch|
+          next unless batch
+          batch.each do |e|
+            f.write(LogStash::Json.dump(e))
+          end
+        end
+      end
+    end
   end
 
   def wait_inputs
@@ -301,12 +292,30 @@ class LogStash::Pipeline
     @logger.info "Closed inputs"
   end # def shutdown
 
+  # After `shutdown` is called from an external thread this is called from the main thread to
+  # tell the worker threads to stop and then block until they've fully stopped
+  # This also stops all filter and output plugins
+  def shutdown_workers
+    # Each worker thread will receive this exactly once!
+    @worker_threads.each do |t|
+      @logger.debug("Pushing shutdown", :thread => t)
+      @input_queue.push(LogStash::SHUTDOWN)
+    end
+
+    @worker_threads.each do |t|
+      @logger.debug("Shutdown waiting for worker thread #{t}")
+      t.join
+    end
+
+    @filters.each(&:do_close)
+    @outputs.each(&:do_close)
+  end
+
   def plugin(plugin_type, name, *args)
     args << {} if args.empty?
     klass = LogStash::Plugin.lookup(plugin_type, name)
     return klass.new(*args)
   end
-
 
   # for backward compatibility in devutils for the rspec helpers, this method is not used
   # in the pipeline anymore.
