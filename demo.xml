@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<graphml xmlns="http://graphml.graphdrawing.org/xmlns">
+    <key id="type" for="node" attr.name="type" attr.type="string"/>
+    <key id="name" for="node" attr.name="name" attr.type="string"/>
+    <key id="config" for="node" attr.name="config" attr.type="string"/>
+    <graph id="G" edgedefault="directed">
+        <node id="89">
+            <data key="type">input</data>
+            <data key="name">generator</data>
+            <data key="config">{"count": 500000, "message": "stdin=yes blah=baz timestamp=2016-02-02"}</data>
+        </node>
+<!--        <node id="1">
+            <data key="type">input</data>
+            <data key="name">file</data>
+            <data key="config">{"path": "/tmp/testlog", "start_position": "beginning"}</data>
+        </node>-->
+        <node id="2">
+            <data key="type">queue</data>
+            <data key="name">main</data>
+        </node>
+        <node id="3">
+            <data key="type">filter</data>
+            <data key="name">kv</data>
+        </node>
+        <node id="4">
+            <data key="type">filter</data>
+            <data key="name">date</data>
+            <data key="config">{"match": ["timestamp", "ISO8601"]}</data>
+        </node>
+        <node id="48">
+            <data key="type">filter</data>
+            <data key="name">mutate</data>
+            <data key="config">{"add_field": {"mutated": "true"}}</data>
+        </node>
+        <node id="5">
+            <data key="type">output</data>
+            <data key="name">file</data>
+            <data key="config">{"path": "/tmp/fileout"}</data>
+        </node>
+        <node id="6">
+            <data key="type">output</data>
+            <data key="name">stdout</data>
+            <data key="config">{"codec": "json_lines"}</data>
+        </node>
+        <!--<edge id="100" source="1" target="2" label="flow"></edge>-->
+        <edge id="101" source="2" target="3" label="flow"></edge>
+        <edge id="102" source="3" target="4" label="flow"></edge>
+        <edge id="1028" source="4" target="48" label="flow"></edge>
+        <edge id="103" source="48" target="5" label="flow"></edge>
+        <edge id="104" source="48" target="6" label="flow"></edge>
+    </graph>
+</graphml>

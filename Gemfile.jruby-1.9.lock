@@ -15,7 +15,7 @@ PATH
       logstash-core-event-java (~> 3.0.0.dev)
       minitar (~> 0.5.4)
       pry (~> 0.10.1)
-      puma (~> 2.15, >= 2.15.3)
+      puma (~> 2.16, >= 2.16.0)
       rubyzip (~> 1.1.7)
       sinatra (~> 1.4, >= 1.4.6)
       stud (~> 0.0.19)
@@ -68,6 +68,7 @@ GEM
     file-dependencies (0.1.6)
       minitar
     filesize (0.0.4)
+    filewatch (0.8.0)
     flores (0.0.6)
     fpm (1.3.3)
       arr-pm (~> 0.0.9)
@@ -81,14 +82,33 @@ GEM
     gems (0.8.3)
     http-cookie (1.0.2)
       domain_name (~> 0.5)
+    httpclient (2.7.1)
     i18n (0.6.9)
     insist (1.0.0)
     jar-dependencies (0.3.2)
+    jls-grok (0.11.2)
+      cabin (>= 0.6.0)
     jrjackson (0.3.8)
     jruby-monitoring (0.3.0)
     jruby-openssl (0.9.13-java)
     json (1.8.3-java)
     kramdown (1.9.0)
+    lock_jar (0.12.6)
+      naether (~> 0.14.3)
+      thor (>= 0.18.1)
+    logstash-codec-json (2.0.4)
+      logstash-core (>= 2.0.0.beta2, < 3.0.0)
+    logstash-codec-json_lines (2.0.5)
+      logstash-codec-line (>= 2.1.0)
+      logstash-core (>= 2.0.0.beta2, < 3.0.0)
+    logstash-codec-line (2.1.0)
+      logstash-core (>= 2.0.0.beta2, < 3.0.0)
+    logstash-codec-multiline (2.0.7)
+      jls-grok (~> 0.11.1)
+      logstash-core (>= 2.0.0, < 3.0.0)
+      logstash-patterns-core
+    logstash-codec-plain (2.0.2)
+      logstash-core (>= 2.0.0.beta2, < 3.0.0)
     logstash-devutils (0.0.18-java)
       gem_publisher
       insist (= 1.0.0)
@@ -98,14 +118,73 @@ GEM
       rspec (~> 3.1.0)
       rspec-wait
       stud (>= 0.0.20)
+    logstash-filter-clone (2.0.4)
+      logstash-core (>= 2.0.0.beta2, < 3.0.0)
+    logstash-filter-date (2.1.1)
+      logstash-codec-json
+      logstash-core (>= 2.0.0.beta2, < 3.0.0)
+      logstash-input-generator
+      logstash-output-null
+    logstash-filter-grok (2.0.3)
+      jls-grok (~> 0.11.1)
+      logstash-core (>= 2.0.0.beta2, < 3.0.0)
+      logstash-patterns-core
+    logstash-filter-kv (2.0.4)
+      logstash-core (>= 2.0.0.beta2, < 3.0.0)
+    logstash-filter-multiline (2.0.3)
+      jls-grok (~> 0.11.0)
+      logstash-core (>= 2.0.0.beta2, < 3.0.0)
+      logstash-patterns-core
+    logstash-filter-mutate (2.0.3)
+      logstash-core (>= 2.0.0.beta2, < 3.0.0)
+      logstash-filter-grok
+      logstash-patterns-core
+    logstash-input-file (2.2.1)
+      addressable
+      filewatch (~> 0.8, >= 0.8.0)
+      logstash-codec-multiline (~> 2.0.7)
+      logstash-codec-plain
+      logstash-core (>= 2.0.0, < 3.0.0)
+    logstash-input-generator (2.0.2)
+      logstash-codec-plain
+      logstash-core (>= 2.0.0.beta2, < 3.0.0)
+    logstash-input-stdin (2.0.2)
+      concurrent-ruby
+      logstash-codec-json
+      logstash-codec-json_lines
+      logstash-codec-line
+      logstash-codec-plain
+      logstash-core (>= 2.0.0.beta2, < 3.0.0)
+    logstash-input-tcp (3.0.2)
+      logstash-codec-json
+      logstash-codec-json_lines
+      logstash-codec-line
+      logstash-codec-plain
+      logstash-core (>= 2.0.0.beta2, < 3.0.0)
+    logstash-output-file (2.2.3)
+      logstash-codec-json_lines
+      logstash-codec-line
+      logstash-core (>= 2.0.0.beta2, < 3.0.0)
+    logstash-output-null (2.0.2)
+      logstash-codec-plain
+      logstash-core (>= 2.0.0.beta2, < 3.0.0)
+    logstash-output-stdout (2.0.4)
+      logstash-codec-line
+      logstash-core (>= 2.0.0.beta2, < 3.0.0)
+    logstash-patterns-core (2.0.2)
+      logstash-core (>= 2.0.0.beta2, < 3.0.0)
     method_source (0.8.2)
     mime-types (2.99)
     minitar (0.5.4)
     multipart-post (2.0.0)
+    naether (0.14.3-java)
+      httpclient
     netrc (0.11.0)
     numerizer (0.1.1)
     octokit (3.8.0)
       sawyer (~> 0.6.0, >= 0.5.3)
+    pacer (2.0.24-java)
+      lock_jar (~> 0.12.0)
     polyglot (0.3.5)
     pry (0.10.3-java)
       coderay (~> 1.1.0)
@@ -181,11 +260,23 @@ DEPENDENCIES
   gems (~> 0.8.3)
   logstash-core (= 3.0.0.dev)!
   logstash-core-event-java (= 3.0.0.dev)!
-  logstash-devutils (~> 0.0.15)
+  logstash-devutils
+  logstash-filter-clone
+  logstash-filter-date
+  logstash-filter-kv
+  logstash-filter-multiline
+  logstash-filter-mutate
+  logstash-input-file
+  logstash-input-generator
+  logstash-input-stdin
+  logstash-input-tcp
+  logstash-output-file
+  logstash-output-stdout
   octokit (= 3.8.0)
+  pacer
   rack-test
   rspec (~> 3.1.0)
   rubyzip (~> 1.1.7)
   simplecov
-  stud (~> 0.0.21)
+  stud (~> 0.0.22)
   tins (= 1.6)

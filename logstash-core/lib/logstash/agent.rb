@@ -165,6 +165,7 @@ class LogStash::Agent
       LogStash::Pipeline.new(config, settings)
     rescue => e
       @logger.error("fetched an invalid config", :config => config, :reason => e.message)
+      logger.debug("config error backtrace", :backtrace => e.backtrace)
       return
     end
   end
