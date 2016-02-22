@@ -1,6 +1,5 @@
 # encoding: utf-8
 require "thread"
-require "pacer"
 require "stud/interval"
 require "concurrent"
 require "logstash/namespace"
@@ -92,49 +91,15 @@ module LogStash; class Pipeline
     code = @config.compile
     @code = code
 
-    @graph = Pacer.tg
-    Pacer::GraphML.import(@graph, "demo.xml")
-
-
-    @plugin_lookup = @graph.v.reduce({}) do |acc,v|
-      type = v.properties["type"]
-      name = v.properties["name"]
-      next acc if type == "queue"
-
-      args = LogStash::Json.load(v.properties["config"] || "{}")
-      acc[v] = plugin(type, name, args)
-      acc
-    end
-
-    @input_vertices = @graph.v.filter("type" => "input").to_a
-    @inputs = @input_vertices.map {|v| @plugin_lookup[v]}
-
-    @queue_vertices = @graph.v.filter("type" => "queue").to_a
-    #@queues = @queue_vertices.map {|v| LogStash::Util::WrappedSynchronousQueue.new }
-
-    @filter_vertices = @graph.v.filter("type" => "filter").to_a
-    @filters = @filter_vertices.map {|v| @plugin_lookup[v]}
-
-    @output_vertices = @graph.v.filter("type" => "output").to_a
-    @outputs = @output_vertices.map {|v| @plugin_lookup[v]}
-
-    @pipeline_root_vertices = (@filter_vertices + @output_vertices).select {|v| v.in_e.out_v.filter("type" => "queue").count > 0}
-
-    @plugin_lookup.values.each do |plugin|
-      if plugin.respond_to?(:flush)
-        do_flush = proc do |options, &block|
-          events = plugin.flush(options)
-          events.each {|e| block.call(e) }
-        end
-
-        @periodic_flushers << do_flush if plugin.periodic_flush
-        @shutdown_flushers << do_flush
-      end
-    end
-
     # The config code is hard to represent as a log message...
     # So just print it.
     @logger.debug? && @logger.debug("Compiled pipeline code:\n#{code}")
+
+    begin
+      eval(code)
+    rescue => e
+      raise
+    end
 
     @input_queue = LogStash::Util::WrappedSynchronousQueue.new
     @events_filtered = Concurrent::AtomicFixnum.new(0)
@@ -294,36 +259,28 @@ module LogStash; class Pipeline
       namespace_events.increment(:in, input_batch.size)
       namespace_pipeline.increment(:in, input_batch.size)
 
-      @pipeline_root_vertices.each {|prv| process_v(prv, input_batch)}
+      filtered_batch = filter_batch(input_batch)
 
       if signal # Flush on SHUTDOWN or FLUSH
         flush_options = (signal == LogStash::SHUTDOWN) ? {:final => true} : {}
-        #flush_filters_to_batch(filtered_batch, flush_options)
+        flush_filters_to_batch(filtered_batch, flush_options)
       end
+
+      @events_filtered.increment(filtered_batch.size)
+
+      namespace_events.increment(:filtered, filtered_batch.size)
+      namespace_pipeline.increment(:filtered, filtered_batch.size)
+
+      output_batch(filtered_batch)
+
+      namespace_events.increment(:out, filtered_batch.size)
+      namespace_pipeline.increment(:out, filtered_batch.size)
 
       inflight_batches_synchronize { set_current_thread_inflight_batch(nil) }
     end
   end
 
- def process_v(vertex, events)
-   plugin = @plugin_lookup[vertex]
-   processed = if plugin.class == LogStash::FilterDelegator
-                 plugin.multi_filter(events)
-               elsif plugin.class == LogStash::OutputDelegator
-                 plugin.multi_receive(events)
-               else
-                 raise "Unexpected plugin type for #{plugin}"
-               end
-
-   downstream = vertex.out_e.in_v.to_a
-   if downstream.size > 0
-     downstream.each do |downstream_vertex|
-       process_v(downstream_vertex, processed)
-     end
-   end
- end
-
- def take_batch(batch_size, batch_delay)
+  def take_batch(batch_size, batch_delay)
     batch = []
     # Since this is externally synchronized in `worker_look` wec can guarantee that the visibility of an insight batch
     # guaranteed to be a full batch not a partial batch
@@ -352,8 +309,6 @@ module LogStash; class Pipeline
   def filter_batch(batch)
     batch.reduce([]) do |acc,e|
       if e.is_a?(LogStash::Event)
-
-
         filtered = filter_func(e)
         filtered.each {|fe| acc << fe unless fe.cancelled?}
       end
@@ -418,7 +373,6 @@ module LogStash; class Pipeline
 
     @inputs.each do |input|
       input.register
-      puts "STARTING INPUT #{input}"
       start_input(input)
     end
   end
@@ -536,8 +490,6 @@ module LogStash; class Pipeline
   end
 
   def start_flusher
-    return true #TODO: REMOVEME!
-
     # Invariant to help detect improper initialization
     raise "Attempted to start flusher on a stopped pipeline!" if stopped?
 

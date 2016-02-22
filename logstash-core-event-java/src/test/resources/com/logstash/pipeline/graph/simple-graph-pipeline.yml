@@ -1,0 +1,11 @@
+---
+graph:
+  log-reader:
+    type: input
+    component: generator
+    options: {"foo": "bar", "baz": "bot"}
+    to: [queue]
+  queue:
+    type: queue
+    component: synchronous
+    to: []
