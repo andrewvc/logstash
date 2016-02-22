@@ -1,11 +1,16 @@
 ---
 graph:
   log-reader:
-    type: input
-    component: generator
-    options: {"foo": "bar", "baz": "bot"}
-    to: [queue]
-  queue:
-    type: queue
-    component: synchronous
-    to: []
+    component: input-generator
+    options: {"message": "Hello world!", "count": 3}
+    to: [main-q]
+  main-queue:
+    component: queue-synchronous
+    to: [hello-grok]
+  hello-grok:
+    component: filter-grok
+    options:
+      match: "%{WORD} %{NUMBER}"
+    to: [main-out]
+  main-out:
+    component: output-stdout

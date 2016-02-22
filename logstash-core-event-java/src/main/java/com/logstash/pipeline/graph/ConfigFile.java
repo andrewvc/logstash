@@ -19,7 +19,7 @@ public class ConfigFile {
 
     private final PipelineGraph pipelineGraph;
 
-    static class InvalidGraphConfigFile extends Throwable {
+    public static class InvalidGraphConfigFile extends Throwable {
         InvalidGraphConfigFile(String message) {
             super(message);
         }
@@ -54,13 +54,21 @@ public class ConfigFile {
             throw new InvalidGraphConfigFile("Missing vertices element in config: " + source);
         }
 
-        graphElement.fields().forEachRemaining(e -> {
+        // Use a for loop here since it's a little tricky with lambdas + exceptions
+        for (Iterator<Map.Entry<String, JsonNode>> geFields = graphElement.fields(); geFields.hasNext();) {
+            Map.Entry<String, JsonNode> e = geFields.next();
+
             JsonNode propsNode = e.getValue();
             String name = e.getKey();
 
-            Vertex.Type type = Vertex.Type.valueOf(propsNode.get("type").asText().toUpperCase());
-            vertices.put(name, new Vertex(name, type));
-        });
+            JsonNode component = propsNode.get("component");
+            if (component == null) {
+                throw new InvalidGraphConfigFile("Missing component declaration for: " + propsNode.asText());
+            }
+            String componentText = component.asText();
+
+            vertices.put(name, new Vertex(name, componentText));
+        }
     }
 
     private void connectVertices() {
