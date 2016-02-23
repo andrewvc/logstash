@@ -62,6 +62,7 @@ module LogStash; class Pipeline
 
    def initialize(pipeline,&block)
      @lookup = {}
+     @execution_lookup = {}
      @pipeline = pipeline
      @on_setup = block
    end
@@ -72,11 +73,17 @@ module LogStash; class Pipeline
      plugin = @pipeline.plugin(type, name, options)
      @on_setup.call(component, plugin)
      @lookup[component] = plugin
+     @execution_lookup[component] = case plugin
+                                      when Logstash::Filters::Base
+                                        plugin.method(:multi_filter)
+                                      when LogStash::Outputs::Base
+                                        plugin.method(:multi_receive)
+                                    end
      require 'pry'; binding.pry
    end
 
    def process(component, events)
-     @lookup[component]
+     @execution_lookup[component].call(events)
    end
 
  end
