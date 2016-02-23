@@ -9,6 +9,11 @@ buildscript {
     }
 }
 
+plugins {
+    id 'java' // or 'groovy' Must be explicitly applied
+    id 'com.github.johnrengelman.shadow' version '1.2.3'
+}
+
 repositories {
     mavenLocal()
     mavenCentral()
@@ -100,6 +105,13 @@ dependencies {
     testCompile 'junit:junit:4.12'
     testCompile 'net.javacrumbs.json-unit:json-unit:1.9.0'
 }
+
+shadowJar {
+    dependencies {
+        exclude(dependency('org.jruby:jruby-core:1.7.22'))
+    }
+}
+
 
 // See http://www.gradle.org/docs/current/userguide/gradle_wrapper.html
 task wrapper(type: Wrapper) {

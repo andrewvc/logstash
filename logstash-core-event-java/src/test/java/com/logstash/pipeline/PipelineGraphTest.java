@@ -18,7 +18,7 @@ public class PipelineGraphTest {
         String ymlString = IOUtils.toString(ymlStream, "UTF-8");
         IOUtils.closeQuietly(ymlStream);
 
-        return ConfigFile.fromString(ymlString).getPipelineGraph();
+        return ConfigFile.fromString(ymlString, new TestComponentProcessor()).getPipelineGraph();
     }
     public static PipelineGraph loadSimpleGraph() throws IOException, ConfigFile.InvalidGraphConfigFile {
         return loadGraph("simple-graph-pipeline.yml");
@@ -31,9 +31,14 @@ public class PipelineGraphTest {
 
     @Test
     public void testGraphQueueGetReturnsQueue() throws IOException, ConfigFile.InvalidGraphConfigFile {
-        assertEquals(loadSimpleGraph().queueVertex().getType(), Vertex.Type.QUEUE);
+        assertEquals(loadSimpleGraph().queueVertex().getComponent().getType(), Component.Type.QUEUE);
     }
 
     @Test
-    public void
+    public void testPullingComponents() throws IOException, ConfigFile.InvalidGraphConfigFile {
+        Component[] components = loadSimpleGraph().getComponents();
+        assertEquals(components.length, loadSimpleGraph().getVertices().size());
+    }
+
+
 }

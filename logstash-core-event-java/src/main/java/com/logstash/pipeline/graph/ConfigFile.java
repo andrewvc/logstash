@@ -3,6 +3,8 @@ package com.logstash.pipeline.graph;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
+import com.logstash.pipeline.Component;
+import com.logstash.pipeline.ComponentProcessor;
 import com.logstash.pipeline.PipelineGraph;
 
 import java.io.IOException;
@@ -25,20 +27,20 @@ public class ConfigFile {
         }
     }
 
-    public static ConfigFile fromString(String source) throws IOException, InvalidGraphConfigFile {
-        final ObjectMapper mapper = new ObjectMapper(new YAMLFactory());
+    public static ConfigFile fromString(String source, ComponentProcessor componentProcessor) throws IOException, InvalidGraphConfigFile {
+        ObjectMapper mapper = new ObjectMapper(new YAMLFactory());
         JsonNode tree = mapper.readTree(source);
-        return new ConfigFile(source, tree);
+        return new ConfigFile(source, tree, componentProcessor);
     }
 
-    ConfigFile(String source, JsonNode tree) throws InvalidGraphConfigFile {
+    public ConfigFile(String source, JsonNode tree, ComponentProcessor componentProcessor) throws InvalidGraphConfigFile {
         this.source = source;
         this.tree = tree;
 
         this.graphElement = tree.get("graph");
         buildVertices();
         connectVertices();
-        this.pipelineGraph = new PipelineGraph(vertices);
+        this.pipelineGraph = new PipelineGraph(vertices, componentProcessor);
     }
 
     public PipelineGraph getPipelineGraph() {
@@ -59,15 +61,25 @@ public class ConfigFile {
             Map.Entry<String, JsonNode> e = geFields.next();
 
             JsonNode propsNode = e.getValue();
-            String name = e.getKey();
+            String id = e.getKey();
 
-            JsonNode component = propsNode.get("component");
-            if (component == null) {
+            JsonNode componentNameNode = propsNode.get("component");
+            if (componentNameNode == null) {
                 throw new InvalidGraphConfigFile("Missing component declaration for: " + propsNode.asText());
             }
-            String componentText = component.asText();
+            String componentNameText = componentNameNode.asText();
 
-            vertices.put(name, new Vertex(name, componentText));
+            JsonNode optionsNode = propsNode.get("options");
+
+            String optionsStr;
+            if (optionsNode == null) {
+                optionsStr = null;
+            } else {
+                optionsStr = optionsNode.toString();
+            }
+
+            Component component = new Component(id, componentNameText, optionsStr);
+            vertices.put(id, new Vertex(id, component));
         }
     }
 

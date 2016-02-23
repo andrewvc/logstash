@@ -21,6 +21,8 @@ require "logstash/instrument/collector"
 require "logstash/output_delegator"
 require "logstash/filter_delegator"
 
+java_import 'com.logstash.pipeline.graph.ConfigFile'
+
 module LogStash; class Pipeline
  attr_reader :inputs,
     :filters,
@@ -55,6 +57,30 @@ module LogStash; class Pipeline
     end
   end
 
+ class PipelineComponentProcessor
+   include com.logstash.pipeline.ComponentProcessor;
+
+   def initialize(pipeline,&block)
+     @lookup = {}
+     @pipeline = pipeline
+     @on_setup = block
+   end
+
+   def setup(component)
+     type, name = component.getComponentName.split("-", 2)
+     options = component.getOptionsStr ? LogStash::Json.load(component.getOptionsStr) : {}
+     plugin = @pipeline.plugin(type, name, options)
+     @on_setup.call(component, plugin)
+     @lookup[component] = plugin
+     require 'pry'; binding.pry
+   end
+
+   def process(component, events)
+     @lookup[component]
+   end
+
+ end
+
   def initialize(config_str, settings = {})
     @config_str = config_str
     @original_settings = settings
@@ -64,9 +90,9 @@ module LogStash; class Pipeline
     settings.each {|setting, value| configure(setting, value) }
     @reporter = LogStash::PipelineReporter.new(@logger, self)
 
-    @inputs = nil
-    @filters = nil
-    @outputs = nil
+    @inputs = []
+    @filters = []
+    @outputs = []
 
     @worker_threads = []
 
@@ -79,6 +105,20 @@ module LogStash; class Pipeline
     # This need to be configured before we evaluate the code to make
     # sure the metric instance is correctly send to the plugin.
     @metric = settings.fetch(:metric, Instrument::NullMetric.new)
+
+    source = ::File.open("simple-graph-pipeline.yml","r").read
+    component_processor = PipelineComponentProcessor.new(self) do |component, plugin|
+      case plugin
+        when LogStash::Inputs::Base
+          @inputs << plugin
+        when LogStash::Filters::Base
+          @filters << plugin
+        when LogStash::Outputs::Base
+          @outputs << plugin
+      end
+    end
+    config_file = com.logstash.pipeline.graph.ConfigFile.fromString(source, component_processor)
+    graph = config_file.getPipelineGraph()
 
     grammar = LogStashConfigParser.new
     @config = grammar.parse(config_str)
@@ -94,12 +134,6 @@ module LogStash; class Pipeline
     # The config code is hard to represent as a log message...
     # So just print it.
     @logger.debug? && @logger.debug("Compiled pipeline code:\n#{code}")
-
-    begin
-      eval(code)
-    rescue => e
-      raise
-    end
 
     @input_queue = LogStash::Util::WrappedSynchronousQueue.new
     @events_filtered = Concurrent::AtomicFixnum.new(0)
@@ -159,6 +193,11 @@ module LogStash; class Pipeline
   end
 
   def run
+
+
+
+
+
     @started_at = Time.now
 
     LogStash::Util.set_thread_name("[#{pipeline_id}]-pipeline-manager")

@@ -4,6 +4,7 @@ package com.logstash.pipeline;
 import com.logstash.Event;
 import com.logstash.pipeline.graph.Vertex;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 
@@ -12,9 +13,18 @@ import java.util.Map;
  */
 public class PipelineGraph {
     private final Map<String, Vertex> vertices;
+    private final ComponentProcessor componentProcessor;
 
-    public PipelineGraph(Map<String, Vertex> vertices) {
+    public PipelineGraph(Map<String, Vertex> vertices, ComponentProcessor componentProcessor) {
         this.vertices = vertices;
+        this.componentProcessor = componentProcessor;
+
+        //TODO: Make this streamy
+        Component[] components = this.getComponents();
+        for (int i=0; i < components.length; i++) {
+            Component component = components[i];
+            componentProcessor.setup(component);
+        }
     }
 
     public void processWorker(ComponentProcessor componentProcessor, List<Event> events) {
@@ -24,7 +34,8 @@ public class PipelineGraph {
     }
 
     public void processVertex(Vertex v, ComponentProcessor componentProcessor, List<Event> inEvents) {
-        List<Event> outEvents = componentProcessor.process(v.getId(), v.getType(), v.getComponentName(), inEvents);
+        Component component = v.getComponent();
+        List<Event> outEvents = componentProcessor.process(component, inEvents);
         v.getOutVertices().forEach(outV -> processVertex(outV, componentProcessor, outEvents));
     }
 
@@ -37,5 +48,17 @@ public class PipelineGraph {
 
     public Vertex queueVertex() {
         return this.vertices.get("main-queue");
+    }
+
+    public Component[] getComponents() {
+        return this.vertices.values().stream().map(Vertex::getComponent).toArray(Component[]::new);
+    }
+
+    public Map<String, Vertex> getVertexMapping() {
+        return this.vertices;
+    }
+
+    public Collection<Vertex> getVertices() {
+        return this.vertices.values();
     }
 }

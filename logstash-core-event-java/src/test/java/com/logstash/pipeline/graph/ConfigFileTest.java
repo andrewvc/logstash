@@ -1,6 +1,7 @@
 package com.logstash.pipeline.graph;
 
 import com.logstash.pipeline.PipelineGraph;
+import com.logstash.pipeline.TestComponentProcessor;
 import org.apache.commons.io.IOUtils;
 import org.junit.Test;
 
@@ -19,7 +20,7 @@ public class ConfigFileTest {
         String ymlString = IOUtils.toString(ymlStream, "UTF-8");
         IOUtils.closeQuietly(ymlStream);
 
-        ConfigFile f = ConfigFile.fromString(ymlString);
+        ConfigFile f = ConfigFile.fromString(ymlString, new TestComponentProcessor());
         assertEquals(f, f);
     }
 
