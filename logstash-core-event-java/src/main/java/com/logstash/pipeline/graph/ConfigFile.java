@@ -105,8 +105,6 @@ public class ConfigFile {
                 } else {
                     throw new IllegalArgumentException(("Non-textual 'out' vertex"));
                 }
-
-                v.getOutVertices().add(v);
             });
         });
     }

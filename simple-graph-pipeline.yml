@@ -2,7 +2,7 @@
 graph:
   log-reader:
     component: input-generator
-    options: {"message": "Hello world!", "count": 3}
+    options: {"message": "Hello 50", "count": 5000000}
     to: [main-q]
   main-queue:
     component: queue-synchronous
@@ -10,7 +10,15 @@ graph:
   hello-grok:
     component: filter-grok
     options:
-      match: "%{WORD} %{NUMBER}"
+      match:
+        message: "%{WORD:greeting} %{NUMBER:greetno}"
     to: [main-out]
+  field-adder:
+    component: filter-mutate
+    options:
+      add_field:
+        foo: bar
   main-out:
     component: output-stdout
+    options:
+      codec: dots

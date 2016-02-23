@@ -7,6 +7,8 @@ import com.logstash.pipeline.graph.Vertex;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * Created by andrewvc on 2/20/16.
@@ -27,16 +29,16 @@ public class PipelineGraph {
         }
     }
 
-    public void processWorker(ComponentProcessor componentProcessor, List<Event> events) {
+    public void processWorker(Batch batch) {
         workerVertices().forEach(wv -> {
-            processVertex(wv, componentProcessor, events);
+            processVertex(wv, batch.getEvents());
         });
     }
 
-    public void processVertex(Vertex v, ComponentProcessor componentProcessor, List<Event> inEvents) {
+    public void processVertex(Vertex v, List<Event> inEvents) {
         Component component = v.getComponent();
         List<Event> outEvents = componentProcessor.process(component, inEvents);
-        v.getOutVertices().forEach(outV -> processVertex(outV, componentProcessor, outEvents));
+        v.getOutVertices().forEach(outV -> processVertex(outV, outEvents));
     }
 
     // Vertices that occur after the queue
@@ -54,11 +56,19 @@ public class PipelineGraph {
         return this.vertices.values().stream().map(Vertex::getComponent).toArray(Component[]::new);
     }
 
+    public Stream<Component> componentStream() {
+        return this.vertices.values().stream().map(Vertex::getComponent);
+    }
+
     public Map<String, Vertex> getVertexMapping() {
         return this.vertices;
     }
 
     public Collection<Vertex> getVertices() {
         return this.vertices.values();
+    }
+
+    public void flush(boolean shutdown) {
+        this.componentStream().forEach(c -> componentProcessor.flush(c, shutdown));
     }
 }

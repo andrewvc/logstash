@@ -4,7 +4,7 @@ package com.logstash.pipeline;
  * Created by andrewvc on 2/22/16.
  */
 public class Component {
-    public enum Type { INPUT, QUEUE, FILTER, OUTPUT }
+    public enum Type { INPUT, QUEUE, FILTER, OUTPUT, PREDICATE }
 
     private final Type type;
     private final String id;
@@ -20,7 +20,6 @@ public class Component {
 
     private Type extractTypeFromComponentName(String componentName) {
         String[] componentParts = componentName.split("-", 2);
-
         return Type.valueOf(componentParts[0].toUpperCase());
     }
 

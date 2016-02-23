@@ -21,7 +21,10 @@ require "logstash/instrument/collector"
 require "logstash/output_delegator"
 require "logstash/filter_delegator"
 
+java_import 'com.logstash.pipeline.Worker'
 java_import 'com.logstash.pipeline.graph.ConfigFile'
+java_import 'com.logstash.pipeline.Constants'
+
 
 module LogStash; class Pipeline
  attr_reader :inputs,
@@ -58,7 +61,7 @@ module LogStash; class Pipeline
   end
 
  class PipelineComponentProcessor
-   include com.logstash.pipeline.ComponentProcessor;
+   include com.logstash.pipeline.ComponentProcessor
 
    def initialize(pipeline,&block)
      @lookup = {}
@@ -70,20 +73,45 @@ module LogStash; class Pipeline
    def setup(component)
      type, name = component.getComponentName.split("-", 2)
      options = component.getOptionsStr ? LogStash::Json.load(component.getOptionsStr) : {}
+     return if type == "queue" # TODO: One day this will do something...
      plugin = @pipeline.plugin(type, name, options)
-     @on_setup.call(component, plugin)
+     @on_setup.call(component, plugin) if @on_setup
      @lookup[component] = plugin
-     @execution_lookup[component] = case plugin
-                                      when Logstash::Filters::Base
-                                        plugin.method(:multi_filter)
-                                      when LogStash::Outputs::Base
-                                        plugin.method(:multi_receive)
+     @execution_lookup[component] = if plugin.is_a? LogStash::FilterDelegator
+                                      proc do |events|
+                                        events = plugin.multi_filter(events)
+                                        @pipeline.events_filtered.increment(events.length)
+                                        events
+                                      end
+                                      plugin.method(:multi_filter)
+                                    elsif plugin.is_a? LogStash::OutputDelegator
+                                      proc do |events|
+                                        events = plugin.multi_receive(events)
+                                        @pipeline.events_consumed.increment(events.length)
+                                        events
+                                      end
                                     end
-     require 'pry'; binding.pry
    end
 
    def process(component, events)
-     @execution_lookup[component].call(events)
+     rubyified_events = rubyify_events(events.compact)
+     res = @execution_lookup[component].call(rubyified_events)
+     javaify_events(res)
+   end
+
+   def rubyify_events(java_events)
+     java_events.map {|e| Event.from_java(e)}
+   end
+
+   def javaify_events(ruby_events)
+     ruby_events.map {|e| e.to_java}
+   end
+
+   def flush(component, shutdown)
+     component = @lookup[component]
+     if component.respond_to?(:flush)
+       component.flush()
+     end
    end
 
  end
@@ -113,34 +141,18 @@ module LogStash; class Pipeline
     # sure the metric instance is correctly send to the plugin.
     @metric = settings.fetch(:metric, Instrument::NullMetric.new)
 
-    source = ::File.open("simple-graph-pipeline.yml","r").read
     component_processor = PipelineComponentProcessor.new(self) do |component, plugin|
       case plugin
         when LogStash::Inputs::Base
           @inputs << plugin
-        when LogStash::Filters::Base
+        when LogStash::FilterDelegator
           @filters << plugin
-        when LogStash::Outputs::Base
+        when LogStash::OutputDelegator
           @outputs << plugin
       end
     end
-    config_file = com.logstash.pipeline.graph.ConfigFile.fromString(source, component_processor)
-    graph = config_file.getPipelineGraph()
-
-    grammar = LogStashConfigParser.new
-    @config = grammar.parse(config_str)
-    if @config.nil?
-      raise LogStash::ConfigurationError, grammar.failure_reason
-    end
-    # This will compile the config to ruby and evaluate the resulting code.
-    # The code will initialize all the plugins and define the
-    # filter and output methods.
-    code = @config.compile
-    @code = code
-
-    # The config code is hard to represent as a log message...
-    # So just print it.
-    @logger.debug? && @logger.debug("Compiled pipeline code:\n#{code}")
+    @config_file = com.logstash.pipeline.graph.ConfigFile.fromString(config_str, component_processor)
+    @graph = @config_file.getPipelineGraph()
 
     @input_queue = LogStash::Util::WrappedSynchronousQueue.new
     @events_filtered = Concurrent::AtomicFixnum.new(0)
@@ -200,11 +212,6 @@ module LogStash; class Pipeline
   end
 
   def run
-
-
-
-
-
     @started_at = Time.now
 
     LogStash::Util.set_thread_name("[#{pipeline_id}]-pipeline-manager")
@@ -275,12 +282,8 @@ module LogStash; class Pipeline
         @logger.warn "CAUTION: Recommended inflight events max exceeded! Logstash will run with up to #{max_inflight} events in memory in your current configuration. If your message sizes are large this may cause instability with the default heap size. Please consider setting a non-standard heap size, changing the batch size (currently #{batch_size}), or changing the number of pipeline workers (currently #{pipeline_workers})"
       end
 
-      pipeline_workers.times do |t|
-        @worker_threads << Thread.new do
-          LogStash::Util.set_thread_name("[#{pipeline_id}]>worker#{t}")
-          worker_loop(batch_size, batch_delay)
-        end
-      end
+      workers = com.logstash.pipeline.Worker.startWorkers(pipeline_workers, @graph, @input_queue.queue, batch_size, batch_delay)
+      @worker_threads = workers.map(&:getThread)
     ensure
       # it is important to garantee @ready to be true after the startup sequence has been completed
       # to potentially unblock the shutdown method which may be waiting on @ready to proceed
@@ -324,72 +327,6 @@ module LogStash; class Pipeline
 
       inflight_batches_synchronize { set_current_thread_inflight_batch(nil) }
     end
-  end
-
-  def take_batch(batch_size, batch_delay)
-    batch = []
-    # Since this is externally synchronized in `worker_look` wec can guarantee that the visibility of an insight batch
-    # guaranteed to be a full batch not a partial batch
-    set_current_thread_inflight_batch(batch)
-
-    signal = false
-    batch_size.times do |t|
-      event = (t == 0) ? @input_queue.take : @input_queue.poll(batch_delay)
-
-      if event.nil?
-        next
-      elsif event == LogStash::SHUTDOWN || event == LogStash::FLUSH
-        # We MUST break here. If a batch consumes two SHUTDOWN events
-        # then another worker may have its SHUTDOWN 'stolen', thus blocking
-        # the pipeline. We should stop doing work after flush as well.
-        signal = event
-        break
-      else
-        batch << event
-      end
-    end
-
-    [batch, signal]
-  end
-
-  def filter_batch(batch)
-    batch.reduce([]) do |acc,e|
-      if e.is_a?(LogStash::Event)
-        filtered = filter_func(e)
-        filtered.each {|fe| acc << fe unless fe.cancelled?}
-      end
-      acc
-    end
-  rescue Exception => e
-    # Plugins authors should manage their own exceptions in the plugin code
-    # but if an exception is raised up to the worker thread they are considered
-    # fatal and logstash will not recover from this situation.
-    #
-    # Users need to check their configuration or see if there is a bug in the
-    # plugin.
-    @logger.error("Exception in pipelineworker, the pipeline stopped processing new events, please check your filter configuration and restart Logstash.",
-                  "exception" => e, "backtrace" => e.backtrace)
-    raise
-  end
-
-  # Take an array of events and send them to the correct output
-  def output_batch(batch)
-    # Build a mapping of { output_plugin => [events...]}
-    outputs_events = batch.reduce(Hash.new { |h, k| h[k] = [] }) do |acc, event|
-      # We ask the AST to tell us which outputs to send each event to
-      # Then, we stick it in the correct bin
-
-      # output_func should never return anything other than an Array but we have lots of legacy specs
-      # that monkeypatch it and return nil. We can deprecate  "|| []" after fixing these specs
-      outputs_for_event = output_func(event) || []
-
-      outputs_for_event.each { |output| acc[output] << event }
-      acc
-    end
-
-    # Now that we have our output to event mapping we can just invoke each output
-    # once with its list of events
-    outputs_events.each { |output, events| output.multi_receive(events) }
   end
 
   def set_current_thread_inflight_batch(batch)
@@ -484,7 +421,9 @@ module LogStash; class Pipeline
     # Each worker thread will receive this exactly once!
     @worker_threads.each do |t|
       @logger.debug("Pushing shutdown", :thread => t)
-      @input_queue.push(LogStash::SHUTDOWN)
+      10.times do
+        @input_queue.queue.put(LogStash::SHUTDOWN)
+      end
     end
 
     @worker_threads.each do |t|

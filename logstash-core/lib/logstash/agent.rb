@@ -164,6 +164,7 @@ class LogStash::Agent
     begin
       LogStash::Pipeline.new(config, settings)
     rescue => e
+      require 'pry'; binding.pry
       @logger.error("fetched an invalid config", :config => config, :reason => e.message)
       return
     end

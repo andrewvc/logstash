@@ -10,10 +10,14 @@ import java.util.List;
  */
 public class TestComponentProcessor implements ComponentProcessor {
     @Override
-    public List<Event> process(Component component, List<Event> inEvents) {
+    public ArrayList<Event> process(Component component, List<Event> events) {
         return new ArrayList<Event>();
     }
 
+    @Override
+    public void flush(Component c, boolean shutdown) {
+
+    }
     @Override
     public void setup(Component component) {
 
