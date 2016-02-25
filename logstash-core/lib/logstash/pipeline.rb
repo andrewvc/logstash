@@ -354,6 +354,8 @@ module LogStash; class Pipeline
     end
     @inputs += moreinputs
 
+    require 'pry'; binding.pry
+
     @inputs.each do |input|
       input.register
       start_input(input)

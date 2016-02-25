@@ -1,9 +1,11 @@
 package com.logstash.pipeline;
 
 import com.logstash.Event;
+import com.logstash.pipeline.graph.Vertex;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Created by andrewvc on 2/22/16.

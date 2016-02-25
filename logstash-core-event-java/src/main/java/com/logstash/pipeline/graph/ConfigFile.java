@@ -86,7 +86,7 @@ public class ConfigFile {
     private void connectVertices() {
         graphElement.fields().forEachRemaining(field -> {
             String name = field.getKey();
-
+ow 
             JsonNode propsNode = field.getValue();
             JsonNode toNode = propsNode.get("to");
             if (toNode == null || !toNode.isArray()) {
@@ -98,10 +98,19 @@ public class ConfigFile {
                 throw new IllegalArgumentException("Could not connect unknown vertex: " + name);
             }
 
-            Iterator<JsonNode> elems = toNode.elements();
-            elems.forEachRemaining(toName -> {
-                if (toName.isTextual()) {
-                    v.addOutVertex(vertices.get(toName.asText()));
+            Iterator<JsonNode> elements = toNode.elements();
+            while (elements.hasNext()) {
+                JsonNode toElem = elements.next();
+                if (v.getComponent().getType() == Component.Type.PREDICATE) {
+                    if (!toElem.isArray()) {
+                        throw new InvalidGraphConfigFile("Expected array for predicate!");
+                    }
+                    String conditionSource = propsNode.get()
+                    Condition c = new Condition()
+                    v.addOutEdge(vertices.get(toElem.asText()), c)
+                }
+                else if (toElem.isTextual()) {
+                    v.addOutEdge(vertices.get(toElem.asText()));
                 } else {
                     throw new IllegalArgumentException(("Non-textual 'out' vertex"));
                 }

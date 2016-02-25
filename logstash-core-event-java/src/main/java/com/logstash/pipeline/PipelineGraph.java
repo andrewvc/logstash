@@ -38,13 +38,14 @@ public class PipelineGraph {
     public void processVertex(Vertex v, List<Event> inEvents) {
         Component component = v.getComponent();
         List<Event> outEvents = componentProcessor.process(component, inEvents);
+
         v.getOutVertices().forEach(outV -> processVertex(outV, outEvents));
     }
 
     // Vertices that occur after the queue
     // This is a bit hacky and only supports one queue at the moment
     // for our current pipeline
-    public List<Vertex> workerVertices() {
+    public Stream<Vertex> workerVertices() {
         return queueVertex().getOutVertices();
     }
 
