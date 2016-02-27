@@ -3,7 +3,7 @@ graph:
   log-reader:
     component: input-generator
     options: {"message": "Hello world!", "count": 3}
-    to: [main-q]
+    to: [main-queue]
   main-queue:
     component: queue-synchronous
     to: [hello-grok]

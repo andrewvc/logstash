@@ -9,6 +9,7 @@ import com.logstash.pipeline.PipelineGraph;
 
 import java.io.IOException;
 import java.util.*;
+import java.util.function.Consumer;
 
 /**
  * Created by andrewvc on 2/20/16.
@@ -83,10 +84,12 @@ public class ConfigFile {
         }
     }
 
-    private void connectVertices() {
-        graphElement.fields().forEachRemaining(field -> {
+    private void connectVertices() throws InvalidGraphConfigFile {
+        Iterator<Map.Entry<String, JsonNode>> geFields = graphElement.fields();
+        while(geFields.hasNext()) {
+            Map.Entry<String, JsonNode> field = geFields.next();
             String name = field.getKey();
-ow 
+
             JsonNode propsNode = field.getValue();
             JsonNode toNode = propsNode.get("to");
             if (toNode == null || !toNode.isArray()) {
@@ -94,27 +97,76 @@ ow
             }
 
             Vertex v = vertices.get(name);
-            if (v == null) {
-                throw new IllegalArgumentException("Could not connect unknown vertex: " + name);
-            }
+            if (v == null) throw new IllegalArgumentException("Could not connect unknown vertex: " + name);
 
-            Iterator<JsonNode> elements = toNode.elements();
-            while (elements.hasNext()) {
-                JsonNode toElem = elements.next();
+            Iterator<JsonNode> toNodeElements = toNode.elements();
+            while (toNodeElements.hasNext()) {
+                JsonNode toElem = toNodeElements.next();
                 if (v.getComponent().getType() == Component.Type.PREDICATE) {
-                    if (!toElem.isArray()) {
-                        throw new InvalidGraphConfigFile("Expected array for predicate!");
-                    }
-                    String conditionSource = propsNode.get()
-                    Condition c = new Condition()
-                    v.addOutEdge(vertices.get(toElem.asText()), c)
-                }
-                else if (toElem.isTextual()) {
-                    v.addOutEdge(vertices.get(toElem.asText()));
+                    createPredicateVertices(v, toElem);
+                } else if (toElem.isTextual()) {
+                    createStandardVertices(v, toElem);
                 } else {
                     throw new IllegalArgumentException(("Non-textual 'out' vertex"));
                 }
-            });
-        });
+            };
+        };
+    }
+
+    private void createStandardVertices(Vertex v, JsonNode toElem) throws InvalidGraphConfigFile {
+        String toElemVertexName = toElem.asText();
+        Vertex toElemVertex = vertices.get(toElemVertexName);
+        if (toElemVertex == null) {
+            throw new InvalidGraphConfigFile("Could not find vertex: " + toElemVertexName);
+        }
+
+        v.addOutEdge(toElemVertex);
+    }
+
+    private void createPredicateVertices(Vertex v, JsonNode toElem) throws InvalidGraphConfigFile {
+        if (!toElem.isArray()) {
+            throw new InvalidGraphConfigFile("Expected array for predicate! Got: " + toElem.asText());
+        }
+
+        Map<Condition, List<Vertex>> conditionsToVertices = new HashMap<>();
+        Iterator<JsonNode> clauseNodes = toElem.elements();
+        while (clauseNodes.hasNext()) {
+            createToVertices(v, clauseNodes.next());
+        }
+    }
+
+    private void createToVertices(Vertex v, JsonNode clauseNode) throws InvalidGraphConfigFile {
+        if (!clauseNode.isArray()) {
+            throw new InvalidGraphConfigFile("Expected predicate clause to be an array! Got: " + clauseNode.asText());
+        }
+
+        Condition currentCondition;
+        Iterator<JsonNode> cnElems = clauseNode.elements();
+
+        if (!cnElems.hasNext()) {
+            throw new InvalidGraphConfigFile("Expected predicate clause to have at least one element! Got: " + clauseNode);
+        }
+
+        JsonNode condElem = cnElems.next();
+        if (!condElem.isTextual()) throw new InvalidGraphConfigFile("Expected a textual condition element! Got: " + condElem.asText());
+        currentCondition = new Condition(cnElems.next().asText());
+
+        if (!cnElems.hasNext()) {
+            throw new InvalidGraphConfigFile("Expected a list of vertices following the predicate clause!");
+        }
+
+        JsonNode condToElem = cnElems.next();
+        if (!condToElem.isArray()) throw new InvalidGraphConfigFile("Predicate to list must be a list of vertex names! Got: " + condToElem.asText());
+
+        Iterator<JsonNode> condToElemNameElems = condToElem.elements();
+        while(condToElemNameElems.hasNext()) {
+            JsonNode condtoNameElem = condToElemNameElems.next();
+            String condToVertexName = condtoNameElem.asText();
+            Vertex condToVertex = vertices.get(condToVertexName);
+            if (condToVertex == null) {
+                throw new InvalidGraphConfigFile("Could not find vertex: " + condToVertexName);
+            }
+            v.addOutEdge(condToVertex, currentCondition);
+        }
     }
 }
