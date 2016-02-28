@@ -12,7 +12,7 @@ graph:
     options:
       match:
         message: "%{WORD:greeting} %{NUMBER:greetno}"
-    to: [main-out]
+    to: [fizzbuzz]
   fizzbuzz:
     component: predicate-ifelse-ruby
     to:

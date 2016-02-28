@@ -2,8 +2,8 @@
 graph:
   log-reader:
     component: input-generator
-    options: {"message": "Hello 50", "count": 5000000}
-    to: [main-q]
+    options: {"message": "Hello 50", "count": 3}
+    to: [main-queue]
   main-queue:
     component: queue-synchronous
     to: [hello-grok]
@@ -12,31 +12,33 @@ graph:
     options:
       match:
         message: "%{WORD:greeting} %{NUMBER:greetno}"
-    to: [main-out]
+    to: [fizzbuzz]
   fizzbuzz:
     component: predicate-ifelse-ruby
-    to: [
-      ["[sequence] % 15 == 0", [fizzbuzzer]],
-      ["[sequence] % 5 == 0", [fizzer]],
-      ["[sequence] % 3 == 0", [buzzer]]
-      [null, [output-stdout]]
-    ]
+    to:
+      - ["event['[sequence]'] % 15 == 0", [fizzbuzzer]]
+      - ["event['[sequence]'] % 5 == 0", [fizzer]]
+      - ["event['[sequence]'] % 3 == 0", [buzzer]]
+      - ["__ELSE__", [main-out]]
   fizzbuzzer:
     component: filter-mutate
     options:
       add_field:
         fb: fizzbuzz
+    to: [main-out]
   fizzer:
     component: filter-mutate
     options:
       add_field:
         fb: fizz
+    to: [main-out]
   buzzer:
     component: filter-mutate
     options:
       add_field:
         fb: buzz
+    to: [main-out]
   main-out:
     component: output-stdout
     options:
-      codec: rubydebug
+      codec: json_lines

@@ -27,4 +27,6 @@ public class BooleanEventsResult {
     public List<Event> getFalseEvents() {
         return falseEvents;
     }
+
+
 }

@@ -42,4 +42,16 @@ public class Vertex {
         this.outEdges.add(e);
         return e;
     }
+
+    public List<Edge> getOutEdges() {
+        return this.outEdges;
+    }
+
+    public boolean isTerminal() {
+        return this.outEdges.size() == 0;
+    }
+
+    public String toString() {
+       return  String.format("<Vertex (%s)>", this.component);
+    }
 }

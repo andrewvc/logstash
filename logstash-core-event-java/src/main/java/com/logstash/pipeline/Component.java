@@ -36,4 +36,8 @@ public class Component {
     }
 
     public String getOptionsStr() { return optionsStr; }
+
+    public String toString() {
+        return this.getId();
+    }
 }

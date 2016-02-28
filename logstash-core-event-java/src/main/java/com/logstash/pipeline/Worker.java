@@ -68,6 +68,8 @@ public class Worker implements Runnable {
     public Batch takeBatch() {
         boolean flush = false;
         boolean shutdown = false;
+        int batchSequence = 0;
+
         final List<Event> events = new ArrayList<>(batchSize);
 
         for (int i = 0; i < batchSize; i++) {
@@ -87,7 +89,9 @@ public class Worker implements Runnable {
                 flush = true;
             } else if (event == Constants.shutdownEvent) {
                 shutdown = true;
-            } else {
+            } else if (event != null) {
+                batchSequence++;
+                event.setBatchSequence(batchSequence);
                 events.add(event);
             }
         }

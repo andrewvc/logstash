@@ -140,7 +140,7 @@ public class ConfigFile {
 
         JsonNode condElem = cnElems.next();
         checkNodeType(condElem, JsonNodeType.STRING, "Expected a textual condition element!");
-        currentCondition = new Condition(condElem.asText());
+        currentCondition = Condition.fromSource(condElem.asText());
 
         if (!cnElems.hasNext()) {
             throw new InvalidGraphConfigFile("Expected a list of vertices following the predicate clause!");
