@@ -14,7 +14,7 @@ import static org.junit.Assert.*;
  */
 public class PipelineGraphTest {
     public static PipelineGraph loadGraph(String configName) throws IOException, ConfigFile.InvalidGraphConfigFile {
-        InputStream ymlStream =  ConfigFile.class.getResourceAsStream("simple-graph-pipeline.yml");
+        InputStream ymlStream =  ConfigFile.class.getResourceAsStream(configName);
         String ymlString = IOUtils.toString(ymlStream, "UTF-8");
         IOUtils.closeQuietly(ymlStream);
 
@@ -24,9 +24,18 @@ public class PipelineGraphTest {
         return loadGraph("simple-graph-pipeline.yml");
     }
 
+    public static PipelineGraph loadConditionalGraph() throws IOException, ConfigFile.InvalidGraphConfigFile {
+        return loadGraph("conditional-graph-pipeline.yml");
+    }
+
     @Test
     public void testGraphLoad() throws IOException, ConfigFile.InvalidGraphConfigFile {
-        PipelineGraph graph = loadSimpleGraph();
+        loadSimpleGraph();
+    }
+
+    @Test
+    public void testConditionalGraphLoad() throws IOException, ConfigFile.InvalidGraphConfigFile {
+        loadConditionalGraph();
     }
 
     @Test
@@ -40,5 +49,9 @@ public class PipelineGraphTest {
         assertEquals(components.length, loadSimpleGraph().getVertices().size());
     }
 
-
+    @Test
+    public void testQueueConnectedToOneComponent() throws IOException, ConfigFile.InvalidGraphConfigFile {
+        Vertex qv = loadSimpleGraph().queueVertex();
+        assertEquals(qv.getOutVertices().count(), 1);
+    }
 }

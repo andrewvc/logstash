@@ -30,12 +30,14 @@ public class PipelineGraph {
     }
 
     public void processWorker(Batch batch) {
+        System.out.println("PWorker" + workerVertices().count());
         workerVertices().forEach(wv -> {
             processVertex(wv, batch.getEvents());
         });
     }
 
     public void processVertex(Vertex v, List<Event> inEvents) {
+        System.out.println("Traversing vertex" + v.getComponent().getId());
         Component component = v.getComponent();
         List<Event> outEvents = componentProcessor.process(component, inEvents);
 

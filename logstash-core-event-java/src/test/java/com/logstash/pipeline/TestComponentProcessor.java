@@ -1,6 +1,7 @@
 package com.logstash.pipeline;
 
 import com.logstash.Event;
+import com.logstash.pipeline.graph.Condition;
 import com.logstash.pipeline.graph.Vertex;
 
 import java.util.ArrayList;
@@ -14,6 +15,11 @@ public class TestComponentProcessor implements ComponentProcessor {
     @Override
     public ArrayList<Event> process(Component component, List<Event> events) {
         return new ArrayList<Event>();
+    }
+
+    @Override
+    public BooleanEventsResult processCondition(Condition condition, List<Event> events) {
+        return new BooleanEventsResult();
     }
 
     @Override

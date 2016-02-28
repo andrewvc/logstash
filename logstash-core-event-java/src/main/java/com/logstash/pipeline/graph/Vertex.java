@@ -11,12 +11,12 @@ import java.util.stream.Stream;
  * Created by andrewvc on 2/20/16.
  */
 public class Vertex {
-    private final List<Edge> outEdges = new ArrayList<>();
+    private final List<Edge> outEdges;
     private final Component component;
-    private Vertex to;
 
     Vertex(String id, Component component) {
         this.component = component;
+        this.outEdges = new ArrayList<>();
     }
 
     public Component getComponent() {
@@ -36,7 +36,7 @@ public class Vertex {
     }
 
     public Edge addOutEdge(Vertex to, Condition c) {
-        if (!this.hasOutVertex(to)) return null;
+        if (this.hasOutVertex(to)) return null;
 
         Edge e = new Edge(this, to, c);
         this.outEdges.add(e);

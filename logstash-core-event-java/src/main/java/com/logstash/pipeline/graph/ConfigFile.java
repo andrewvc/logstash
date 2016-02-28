@@ -2,6 +2,7 @@ package com.logstash.pipeline.graph;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.JsonNodeType;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import com.logstash.pipeline.Component;
 import com.logstash.pipeline.ComponentProcessor;
@@ -9,7 +10,6 @@ import com.logstash.pipeline.PipelineGraph;
 
 import java.io.IOException;
 import java.util.*;
-import java.util.function.Consumer;
 
 /**
  * Created by andrewvc on 2/20/16.
@@ -92,8 +92,13 @@ public class ConfigFile {
 
             JsonNode propsNode = field.getValue();
             JsonNode toNode = propsNode.get("to");
-            if (toNode == null || !toNode.isArray()) {
-                return;
+
+            // blank to nodes are fine (that's a terminal node)
+            if (toNode == null) {
+                continue;
+            } else {
+                // non-array non-null nodes are a problem!
+                checkNodeType(toNode, JsonNodeType.ARRAY, "The 'to' field must be a list of vertex names if specified!");
             }
 
             Vertex v = vertices.get(name);
@@ -103,9 +108,9 @@ public class ConfigFile {
             while (toNodeElements.hasNext()) {
                 JsonNode toElem = toNodeElements.next();
                 if (v.getComponent().getType() == Component.Type.PREDICATE) {
-                    createPredicateVertices(v, toElem);
+                    createPredicateToEdges(v, toElem);
                 } else if (toElem.isTextual()) {
-                    createStandardVertices(v, toElem);
+                    createStandardEdge(v, toElem);
                 } else {
                     throw new IllegalArgumentException(("Non-textual 'out' vertex"));
                 }
@@ -113,7 +118,7 @@ public class ConfigFile {
         };
     }
 
-    private void createStandardVertices(Vertex v, JsonNode toElem) throws InvalidGraphConfigFile {
+    private void createStandardEdge(Vertex v, JsonNode toElem) throws InvalidGraphConfigFile {
         String toElemVertexName = toElem.asText();
         Vertex toElemVertex = vertices.get(toElemVertexName);
         if (toElemVertex == null) {
@@ -123,22 +128,8 @@ public class ConfigFile {
         v.addOutEdge(toElemVertex);
     }
 
-    private void createPredicateVertices(Vertex v, JsonNode toElem) throws InvalidGraphConfigFile {
-        if (!toElem.isArray()) {
-            throw new InvalidGraphConfigFile("Expected array for predicate! Got: " + toElem.asText());
-        }
-
-        Map<Condition, List<Vertex>> conditionsToVertices = new HashMap<>();
-        Iterator<JsonNode> clauseNodes = toElem.elements();
-        while (clauseNodes.hasNext()) {
-            createToVertices(v, clauseNodes.next());
-        }
-    }
-
-    private void createToVertices(Vertex v, JsonNode clauseNode) throws InvalidGraphConfigFile {
-        if (!clauseNode.isArray()) {
-            throw new InvalidGraphConfigFile("Expected predicate clause to be an array! Got: " + clauseNode.asText());
-        }
+    private void createPredicateToEdges(Vertex v, JsonNode clauseNode) throws InvalidGraphConfigFile {
+        checkNodeType(clauseNode, JsonNodeType.ARRAY, "Expected predicate clause to be an array!");
 
         Condition currentCondition;
         Iterator<JsonNode> cnElems = clauseNode.elements();
@@ -148,15 +139,15 @@ public class ConfigFile {
         }
 
         JsonNode condElem = cnElems.next();
-        if (!condElem.isTextual()) throw new InvalidGraphConfigFile("Expected a textual condition element! Got: " + condElem.asText());
-        currentCondition = new Condition(cnElems.next().asText());
+        checkNodeType(condElem, JsonNodeType.STRING, "Expected a textual condition element!");
+        currentCondition = new Condition(condElem.asText());
 
         if (!cnElems.hasNext()) {
             throw new InvalidGraphConfigFile("Expected a list of vertices following the predicate clause!");
         }
 
         JsonNode condToElem = cnElems.next();
-        if (!condToElem.isArray()) throw new InvalidGraphConfigFile("Predicate to list must be a list of vertex names! Got: " + condToElem.asText());
+        checkNodeType(condToElem, JsonNodeType.ARRAY, "Predicate 'to' list must be a list of vertex names!");
 
         Iterator<JsonNode> condToElemNameElems = condToElem.elements();
         while(condToElemNameElems.hasNext()) {
@@ -167,6 +158,14 @@ public class ConfigFile {
                 throw new InvalidGraphConfigFile("Could not find vertex: " + condToVertexName);
             }
             v.addOutEdge(condToVertex, currentCondition);
+        }
+    }
+
+    private void checkNodeType(JsonNode node, JsonNodeType type, String message) throws InvalidGraphConfigFile {
+        JsonNodeType actualNodeType = node.getNodeType();
+        if (actualNodeType != type) {
+            message = String.format("%s / Expected a %s, got a %s (%s)!", message, type, actualNodeType, node.asText());
+            throw new InvalidGraphConfigFile(message);
         }
     }
 }
