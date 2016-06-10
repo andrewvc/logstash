@@ -27,6 +27,7 @@ grammar LogStashConfig
 
   rule branch_or_plugin
     branch / plugin
+    <LogStash::Config::AST::BranchOrPlugin>
   end
 
   rule plugin_type
