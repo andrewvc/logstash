@@ -2,6 +2,8 @@
 require "concurrent/atomic/atomic_fixnum"
 java_import "java.util.concurrent.CopyOnWriteArrayList"
 
+java_import 'com.logstash.codegen.IExpression'
+
 # This class goes hand in hand with the pipeline to provide a pool of
 # free workers to be used by pipeline worker threads. The pool is
 # internally represented with a SizedQueue set the the size of the number
@@ -9,6 +11,8 @@ java_import "java.util.concurrent.CopyOnWriteArrayList"
 #
 # This plugin also records some basic statistics
 module LogStash class OutputDelegator
+  include com.logstash.codegen.IExpression
+  #java_implements com.logstash.codegen.IExpression
   attr_reader :workers, :config, :threadsafe
 
   # The *args this takes are the same format that a Outputs::Base takes. A list of hashes with parameters in them
@@ -31,6 +35,13 @@ module LogStash class OutputDelegator
 
     @events_received = Concurrent::AtomicFixnum.new(0)
   end
+
+  def executeMulti(java_events)
+    rubyified = java_events.map {|e| Event.from_java(e)}
+    multiReceive(rubyified)
+    java_events
+  end
+  
 
   def threadsafe?
     !!@threadsafe

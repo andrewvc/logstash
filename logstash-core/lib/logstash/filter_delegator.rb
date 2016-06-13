@@ -1,7 +1,10 @@
 # encoding: utf-8
 #
+
+java_import 'com.logstash.codegen.IExpression'
+
 module LogStash
-  class FilterDelegator
+  class FilterDelegator    
     extend Forwardable
     DELEGATED_METHODS = [
       :register,
@@ -12,6 +15,8 @@ module LogStash
       :periodic_flush
     ]
     def_delegators :@filter, *DELEGATED_METHODS
+
+    include com.logstash.codegen.IExpression
 
     def initialize(logger, klass, metric, *args)
       options = args.reduce({}, :merge)
@@ -46,8 +51,26 @@ module LogStash
       @metric_events.increment(:out, c) if c > 0
 
       return new_events
+    end    
+
+    def executeMulti(java_events)
+      require 'pry'; binding.pry
+      rubyified = java_events.map {|e| re = Event.new; re.setJavaEvent(e); re}
+
+      out = java.util.ArrayList.new()
+      multi_filter(rubyified).each do |event|
+        out.add(event)
+      end
+      require 'pry'; binding.pry
+      out
     end
 
+    def execute(event)
+      e = Event.new
+      e.setJavaEvent(event)
+      multi_filter([e]).map(&:to_java)
+    end
+    
     private
     def define_flush_method
       define_singleton_method(:flush) do |options = {}|

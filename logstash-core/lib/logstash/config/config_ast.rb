@@ -16,15 +16,6 @@ class Treetop::Runtime::SyntaxNode
     end
   end
 
-  def compile
-    return "" if elements.nil?
-    return elements.collect(&:compile).reject(&:empty?).join("")
-  end
-
-  def significant_exprs
-    elements.select(&:significant)
-  end
-
   # Traverse the syntax tree recursively.
   # The order should respect the order of the configuration file as it is read
   # and written by humans (and the order in which it is parsed).
@@ -121,10 +112,8 @@ module LogStash; module Config; module AST
       #exprs += definitions.join("\n").split("\n", -1).collect { |l| "  #{l}" }
       
       #exprs += LogStash::Config::AST.defered_conditionals
-
       
-      require 'pry'; binding.pry
-      return code.join("\n")      
+      section_map
     end
   end
 

@@ -19,11 +19,10 @@ require "logstash/instrument/collector"
 require "logstash/output_delegator"
 require "logstash/filter_delegator"
 
+java_import 'com.logstash.codegen.CodeGenerator'
+
 module LogStash; class Pipeline
-  attr_reader :inputs,
-    :filters,
-    :outputs,
-    :worker_threads,
+  attr_reader :worker_threads,
     :events_consumed,
     :events_filtered,
     :reporter,
@@ -48,11 +47,9 @@ module LogStash; class Pipeline
     @pipeline_id = @settings.get_value("pipeline.id") || self.object_id
     @reporter = LogStash::PipelineReporter.new(@logger, self)
 
-    @inputs = nil
-    @filters = nil
-    @outputs = nil
-
     @worker_threads = []
+
+    @plugins = {:input => {}, :filter => {}, :output => {}}
 
     # This needs to be configured before we evaluate the code to make
     # sure the metric instance is correctly send to the plugins to make the namespace scoping work
@@ -66,20 +63,14 @@ module LogStash; class Pipeline
     # This will compile the config to ruby and evaluate the resulting code.
     # The code will initialize all the plugins and define the
     # filter and output methods.
-    code = @config.compile
-    @code = code
+    @sections = @config.compile
+    process_sections
 
     # The config code is hard to represent as a log message...
     # So just print it.
 
     if @settings.get_value("config.debug") && logger.debug?
-      logger.debug("Compiled pipeline code", :code => code)
-    end
-
-    begin
-      eval(code)
-    rescue => e
-      raise
+      logger.debug("Compiled pipeline code", :sections => @sections)
     end
 
     @input_queue = LogStash::Util::WrappedSynchronousQueue.new
@@ -97,6 +88,95 @@ module LogStash; class Pipeline
     @flushing = Concurrent::AtomicReference.new(false)
   end # def initialize
 
+  def process_sections   
+    build_plugins
+    create_filter_func
+  end
+
+  def create_filter_func
+    cg = com.logstash.codegen.CodeGenerator.new
+    ff = walk_map(@processed_sections[:filter]) {|e| javaify(cg, e)}
+
+    l = java.util.ArrayList.new; e = Event.new("foo" => "bar");
+    l.add(e.to_java);
+    puts ff.first.executeMulti(l).first.toJson
+    require 'pry'; binding.pry
+  rescue => e
+    require 'pry'; binding.pry
+  end
+
+  def javaify(cg, e)
+    return e if e.is_a?(com.logstash.codegen.IExpression) || e.is_a?(com.logstash.codegen.IBooleanExpression) || e.is_a?(com.logstash.codegen.IValueExpression)
+
+    return cg.objectValue(e) unless e.is_a?(Array)
+    
+    head, tail = e[0], e[1..-1].map {|e| javaify(cg, e)}
+
+    if head == :if
+      if tail.size == 2
+        tail << cg.noop
+      end
+
+      cg.ifexpr(*tail)
+    elsif head == :==
+      cg.eq(*tail)
+    elsif head == :get
+      cg.get(tail[0].value) # Unbox the object value
+    elsif head == :do
+      cg.multiExpression(tail)
+    else
+      raise ArgumentError, "This shouldn't happen"
+    end    
+  end
+    
+  def build_plugins
+    i = 0
+    # The first stage of plugin processing has us registering plugins
+    # and replacing them in the exprs with plugin instances
+    @processed_sections = Hash[@sections.map do |section, body|
+      [section, body.map do |subsection|
+        walk_map(subsection) do |expr|          
+          if expr.first == :plugin
+            i += 1
+            name, args = expr[1..-1]
+            plugin_inst = plugin(section.to_s, name, args)
+            @plugins[section][i] = plugin_inst
+            plugin_inst
+          else
+            expr
+          end
+        end
+      end]
+    end]
+  end
+
+  def inputs
+    @plugins[:input].values
+  end
+
+  def filters
+    @plugins[:filter].values
+  end
+
+  def outputs
+    @plugins[:output].values
+  end
+
+  def walk(expr,&block)
+    block.call(expr)
+    expr.each {|e| walk(e,&block) if e.is_a?(Array)}
+  end
+
+  def walk_map(expr, &block)
+    expr.map do |e|
+      if e.is_a?(Array)
+        block.call(walk_map(e, &block))
+      else
+        e
+      end
+    end
+  end
+
   def ready?
     @ready.value
   end
@@ -104,7 +184,7 @@ module LogStash; class Pipeline
   def safe_pipeline_worker_count
     default = @settings.get_default("pipeline.workers")
     pipeline_workers = @settings.get("pipeline.workers") #override from args "-w 8" or config
-    safe_filters, unsafe_filters = @filters.partition(&:threadsafe?)
+    safe_filters, unsafe_filters = filters.partition(&:threadsafe?)
     plugins = unsafe_filters.collect { |f| f.config_name }
 
     return pipeline_workers if unsafe_filters.empty?
@@ -127,7 +207,7 @@ module LogStash; class Pipeline
   end
 
   def filters?
-    return @filters.any?
+    return filters.any?
   end
 
   def run
@@ -181,8 +261,8 @@ module LogStash; class Pipeline
     @worker_threads.clear # In case we're restarting the pipeline
     begin
       start_inputs
-      @outputs.each {|o| o.register }
-      @filters.each {|f| f.register }
+      outputs.each {|o| o.register }
+      filters.each {|f| f.register }
 
       pipeline_workers = safe_pipeline_worker_count
       batch_size = @settings.get("pipeline.batch.size")
@@ -331,16 +411,20 @@ module LogStash; class Pipeline
 
   def start_inputs
     moreinputs = []
-    @inputs.each do |input|
+    inputs.each do |input|
       if input.threadable && input.threads > 1
         (input.threads - 1).times do |i|
           moreinputs << input.clone
         end
       end
     end
-    @inputs += moreinputs
 
-    @inputs.each do |input|
+    # TODO: make threaded inputs stop correctly
+    # This technique is not great, we should wrap them in a
+    # delegator like filters / outputs
+    start_inputs + moreinputs
+
+    start_inputs.each do |input|
       input.register
       start_input(input)
     end
@@ -415,8 +499,8 @@ module LogStash; class Pipeline
       t.join
     end
 
-    @filters.each(&:do_close)
-    @outputs.each(&:do_close)
+    filters.each(&:do_close)
+    outputs.each(&:do_close)
   end
 
   def plugin(plugin_type, name, *args)

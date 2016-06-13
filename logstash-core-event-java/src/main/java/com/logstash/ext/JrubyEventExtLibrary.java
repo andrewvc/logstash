@@ -118,6 +118,11 @@ public class JrubyEventExtLibrary implements Library {
             this.event = event;
         }
 
+        @JRubyMethod(name = "setJavaEvent")
+        public void setJavaEvent(ThreadContext context, IRubyObject event) {
+            this.event = (Event) event.toJava(Event.class);
+        }
+
         // def initialize(data = {})
         @JRubyMethod(name = "initialize", optional = 1)
         public IRubyObject ruby_initialize(ThreadContext context, IRubyObject[] args)
