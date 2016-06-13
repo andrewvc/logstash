@@ -6,7 +6,16 @@ class Treetop::Runtime::SyntaxNode
   def significant # Should this element be ignored when building the EXPRs
     true
   end
-  
+
+  def expr
+    require 'pry'; binding.pry
+    if !elements || elements.empty?
+      return [:nothing, self.inspect]
+    else
+      elements.map {|e| e.expr}
+    end
+  end
+
   def compile
     return "" if elements.nil?
     return elements.collect(&:compile).reject(&:empty?).join("")
@@ -359,6 +368,10 @@ module LogStash; module Config; module AST
     end
   end
   class Number < Value
+    def expr
+      text_value.include?(".") ? text_value.to_f : text_value.to_i
+    end
+    
     def compile
       return text_value
     end
@@ -512,74 +525,99 @@ module LogStash; module Config; module AST
 
   class Condition < Node
     def expr
-      initial = [:if]
-      count = 0
+      first_element = elements.first
+      rest_elements = elements.size > 1 ? elements[1].recursive_select(BooleanOperator, Expression) : []
+      
+      all_elements = [first_element, *rest_elements]
 
-      elements.reduce([initial, initial]) do |memo,element|
-        current_expr, full_expr = memo
-
-        count += 1
-
-        require 'pry'; binding.pry
-
-        # Operators work in threes like 1 and 2
-        if count == 3          
-          new_current_expr = [:if, element.expr]
-          
-          op = current_expr.pop
-          if op == :and
-            current_expr << [new_current_expr, true]
-            current_expr << false
-          elsif op == :or
-            # Or precedence beats &&s, rewrap the whole expression
-            full_expr = [:if, element.expr, true, full_expr]
-            current_expr = new_current_expr
-          end
-          
-          count = 1
-        else
-          current_expr << element.expr
-        end
-        
-        [current_expr, full_expr]
-      end.last
+      res = join_conditions(all_elements)
     end
-    
-    def compile
-      return "(#{super})"
+
+    def precedence(op)
+      #  Believe this is right for logstash?
+      case op
+      when :and
+        2
+      when :or
+        1
+      when :xor
+        1
+      when :nand
+        1
+      else
+        raise ArgumentError, "Unexpected operator #{op}"
+      end
+    end
+
+    def join_conditions(all_elements)
+      # Use Dijkstra's shunting yard algorithm
+      out = []
+      operators = []
+
+      all_elements.each do |e|
+        e_exp = e.expr
+
+        if e.is_a?(BooleanOperator)
+          # TODO, are or/nand/xor all equal precedence?
+          # We're treating them that way here, could be wrong
+          # Not worth investigating for a PoC
+          if operators.last && precedence(operators.last) > precedence(e_exp)
+            out << operators.pop
+          end
+          operators << e_exp
+        else
+          out << e_exp
+        end
+      end
+      operators.each {|o| out << o}
+
+      stack = []
+      expr = []
+      out.each do |e|
+        if e.is_a?(Symbol)
+          stack << [e, stack.pop, stack.pop]
+        else
+          stack << e
+        end
+      end
+
+      stack.first
     end
   end
 
   module Expression
-    def compile
-      return "(#{super})"
+    def expr
+      return self.value if self.respond_to?(:value) 
+      
+      self.recursive_select(Condition, Expression).map {|e| e.respond_to?(:value) ? e.value : e.expr }      
     end
   end
 
   module NegativeExpression
-    def compile
-      return "!(#{super})"
+    def value
+      [:not, self.recursive_select(Condition).map(&:expr)]
     end
   end
 
-  module ComparisonExpression; end
+  module ComparisonExpression
+    def value
+      lval, op, rval = self.recursive_select(Selector, ComparisonOperator, Number, String).map(&:expr)
+
+      [op, lval, rval]
+    end
+  end
 
   module InExpression
-    def expr
+    def value # Because this is somehow higher up the inheritance chain than Expression
       item, list = recursive_select(LogStash::Config::AST::RValue)
-      return [:in, list.expr, item.expr]
-    end
-    
-    def compile
-      item, list = recursive_select(LogStash::Config::AST::RValue)
-      return "(x = #{list.compile}; x.respond_to?(:include?) && x.include?(#{item.compile}))"
+      [:in, list.expr, item.expr]
     end
   end
 
   module NotInExpression
-    def compile
+    def value
       item, list = recursive_select(LogStash::Config::AST::RValue)
-      return "(x = #{list.compile}; !x.respond_to?(:include?) || !x.include?(#{item.compile}))"
+      return [:not [:in, list.expr, item.expr]]
     end
   end
 
@@ -605,23 +643,23 @@ module LogStash; module Config; module AST
   end
 
   module ComparisonOperator
-    def compile
-      return " #{text_value} "
+    def expr
+      self.text_value.to_sym
     end
   end
   module RegExpOperator
-    def compile
-      return " #{text_value} "
-    end
+    def expr
+      [:re_match, self.text_value.to_sym]
+    end    
   end
   module BooleanOperator
-    def compile
-      return " #{text_value} "
+    def expr
+      self.text_value.to_sym
     end
   end
   class Selector < RValue
     def expr
-      [:eget, text_value[1..-1]]
+      [:get, text_value]
     end
   end
   class SelectorElement < Node; end
