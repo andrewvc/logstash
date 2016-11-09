@@ -33,9 +33,9 @@ describe LogStash::Compiler do
       end
 
       it "should run correctly" do
-          compiled.start(1)
-        puts "SLEEP"
-        sleep 100
+        #compiled.start(1)
+        #puts "SLEEP"
+        #sleep 100
       end
     end
   end
@@ -219,7 +219,6 @@ output {
         g.each {|s,v| puts "\n!#{s}\n"; puts v.to_s}
         puts "\n!!!PIPELINE!!!"
         puts compiled.to_s
-        require 'pry'; binding.pry
       end
     end
   end

@@ -42,6 +42,13 @@ module LogStash; module Config; module AST
     def jdsl
       Java::OrgLogstashConfigIr::DSL
     end
+
+    def self.jdsl
+      Java::OrgLogstashConfigIr::DSL
+    end
+
+    AND_METHOD = jdsl.method(:eAnd)
+    OR_METHOD = jdsl.method(:eOr)
   end
 end; end; end
 
@@ -84,6 +91,7 @@ class Treetop::Runtime::SyntaxNode
     parts = [
       LogStash::Config::AST::Selector,
       LogStash::Config::AST::Expression,
+      LogStash::Config::AST::BooleanOperator,
       LogStash::Config::AST::ComparisonOperator,
       LogStash::Config::AST::Number,
       LogStash::Config::AST::String
@@ -344,7 +352,11 @@ module LogStash; module Config; module AST
         if java_t_branch || java_f_branch
           # Invert the expression and make the f_branch the t_branch
 
+          begin
           jdsl.iIf(condition, java_t_branch || jdsl.noop, java_f_branch || jdsl.noop)
+        rescue => e
+          require 'pry'; binding.pry
+        end
         else
           jdsl.noop()
         end
@@ -386,7 +398,7 @@ module LogStash; module Config; module AST
           eventValue = elem.recursive_select(SelectorElement).first.expr
           jdsl.eTruthy(eventValue)
         elsif elem.is_a?(RegexpExpression)
-          elem.value
+          elem.expr
         else
           join_conditions(all_elements)
         end
@@ -399,9 +411,9 @@ module LogStash; module Config; module AST
     def precedence(op)
       #  Believe this is right for logstash?
       case op
-      when :and
+      when ::LogStash::Config::AST::JDSL::AND_METHOD
         2
-      when :or
+      when ::LogStash::Config::AST::JDSL::OR_METHOD
         1
       else
         raise ArgumentError, "Unexpected operator #{op}"
@@ -411,7 +423,9 @@ module LogStash; module Config; module AST
     def jconvert(sexpr)
       raise "jconvert cannot handle nils!" if sexpr.nil?
 
-      return sexpr if sexpr.java_kind_of?(Java::OrgLogstashConfigIrExpression::Expression)
+      if sexpr.java_kind_of?(Java::OrgLogstashConfigIrExpression::Expression)
+        return sexpr
+      end
 
       op, left, right = sexpr
 
@@ -429,7 +443,6 @@ module LogStash; module Config; module AST
     end
 
     def join_conditions(all_elements)
-      puts "JC"
       # Use Dijkstra's shunting yard algorithm
       out = []
       operators = []
@@ -439,12 +452,10 @@ module LogStash; module Config; module AST
 
         if e.is_a?(BooleanOperator)
           if operators.last && precedence(operators.last) > precedence(e_exp)
-            require 'pry'; binding.pry if operators.last.nil?
             out << operators.pop
           end
           operators << e_exp
         else
-          require 'pry'; binding.pry if e_exp.nil?
           out << e_exp
         end
       end
@@ -452,34 +463,41 @@ module LogStash; module Config; module AST
 
       stack = []
       expr = []
-      x = false
-      puts "reach #{out.size} #{JRUBY_VERSION} #{RUBY_VERSION}"
-      begin
-        raise "foo"
-      rescue => e
-        puts "BLEN: #{e.backtrace.size}"
-      end
       out.each do |e|
-        puts "EProc #{e} | #{self.text_value}"
-
         if e.is_a?(Symbol)
           rval, lval = stack.pop, stack.pop
-          puts "JCONV"
           stack << jconvert([e, lval, rval])
-          puts "ENDJCONV"
         elsif e.nil?
-          # noop
+          raise "Nil expr encountered!"
         else
           stack << e
         end
       end
-      puts "EDONE"
 
+      stack_to_expr(stack)
+    end
 
-      if stack.size > 1
-        require 'binding.pry'
+    def stack_to_expr(stack)
+      raise "Got an empty stack!" if stack.empty?
+      stack = stack.reverse
+
+      working_stack = []
+      while elem = stack.pop
+        if elem.is_a?(::Method)
+          right, left = working_stack.pop, working_stack.pop
+          working_stack << elem.call(left, right)
+        else
+          working_stack << elem
+        end
       end
-      return stack.first
+
+      raise "Invariant violated! Stack size > 1" if working_stack.size > 1
+
+      working_stack.first
+    end
+
+    def dslify_stack(stack)
+      dslify_stack()
     end
   end
 
@@ -489,7 +507,9 @@ module LogStash; module Config; module AST
         return super
       end
 
-      exprs = self.recursive_select_expr_parts
+      exprs = self.recursive_select(Condition, Selector).map(&:expr)
+
+      require 'pry'; binding.pry if exprs.size != 1
       raise "Exprs should only have one part!" if exprs.size != 1
       exprs.first
     end
@@ -499,9 +519,11 @@ module LogStash; module Config; module AST
     include JDSL
 
     def expr
-      exprs = self.recursive_select_expr_parts
+      exprs = self.recursive_select(Condition, Selector).map(&:expr)
       raise "Negative exprs should only have one part!" if exprs.size != 1
       jdsl.eNot(source_meta, exprs.first)
+    rescue => e
+      require 'pry'; binding.pry
     end
   end
 
@@ -589,7 +611,14 @@ module LogStash; module Config; module AST
   end
   module BooleanOperator
     def expr
-      self.text_value.to_sym
+      case self.text_value
+      when "and"
+        ::LogStash::Config::AST::JDSL::AND_METHOD
+      when "or"
+        ::LogStash::Config::AST::JDSL::OR_METHOD
+      else
+        raise "Unknown operator #{self.text_value}"
+      end
     end
   end
   class Selector < RValue

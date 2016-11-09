@@ -153,11 +153,14 @@ public class DSL {
         return new Not(null, expr);
     }
 
-    public static Truthy eTruthy(SourceMetadata meta, Expression expr) throws InvalidIRException {
+    public static BooleanExpression eTruthy(SourceMetadata meta, Expression expr) throws InvalidIRException {
+        if (expr instanceof BooleanExpression) {
+            return (BooleanExpression) expr;
+        }
         return new Truthy(meta, expr);
     }
-    public static Truthy eTruthy(Expression expr) throws InvalidIRException {
-        return new Truthy(null, expr);
+    public static BooleanExpression eTruthy(Expression expr) throws InvalidIRException {
+        return eTruthy(null, expr);
     }
 
     public static Statement iCompose(ComposedStatement.IFactory factory, SourceMetadata meta, Statement... statements) throws InvalidIRException {
@@ -211,23 +214,23 @@ public class DSL {
     }
 
     public static IfStatement iIf(SourceMetadata meta,
-                                  BooleanExpression condition,
+                                  Expression condition,
                                   Statement ifTrue,
                                   Statement ifFalse) throws InvalidIRException {
-        return new IfStatement(meta, condition, ifTrue, ifFalse);
+        BooleanExpression booleanExpression = eTruthy(meta, condition);
+        return new IfStatement(meta, booleanExpression, ifTrue, ifFalse);
     }
 
-    public static IfStatement iIf(BooleanExpression condition,
+    public static IfStatement iIf(Expression condition,
                                   Statement ifTrue,
                                   Statement ifFalse) throws InvalidIRException {
         return iIf(new SourceMetadata(), condition, ifTrue, ifFalse);
     }
 
-    public static IfStatement iIf(BooleanExpression condition,
+    public static IfStatement iIf(Expression condition,
                                   Statement ifTrue) throws InvalidIRException {
         return iIf(new SourceMetadata(), condition, ifTrue, noop());
     }
-
 
     public static class MapBuilder<K,V> {
         private final HashMap<K, V> map;
