@@ -80,6 +80,17 @@ class Treetop::Runtime::SyntaxNode
     return recursive_inject { |e| klasses.any? {|k| e.is_a?(k)} }
   end
 
+  def recursive_select_expr_parts
+    parts = [
+      LogStash::Config::AST::Selector,
+      LogStash::Config::AST::Expression,
+      LogStash::Config::AST::ComparisonOperator,
+      LogStash::Config::AST::Number,
+      LogStash::Config::AST::String
+    ]
+    lval, comparison_method, rval = self.recursive_select(*parts).map(&:expr)
+  end
+
   def recursive_inject_parent(results=[], &block)
     if !parent.nil?
       if block.call(parent)
@@ -398,7 +409,9 @@ module LogStash; module Config; module AST
     end
 
     def jconvert(sexpr)
-      return sexpr if sexpr.java_kind_of?(Java::OrgLogstashConfigIrExpression::BooleanExpression)
+      raise "jconvert cannot handle nils!" if sexpr.nil?
+
+      return sexpr if sexpr.java_kind_of?(Java::OrgLogstashConfigIrExpression::Expression)
 
       op, left, right = sexpr
 
@@ -416,6 +429,7 @@ module LogStash; module Config; module AST
     end
 
     def join_conditions(all_elements)
+      puts "JC"
       # Use Dijkstra's shunting yard algorithm
       out = []
       operators = []
@@ -425,10 +439,12 @@ module LogStash; module Config; module AST
 
         if e.is_a?(BooleanOperator)
           if operators.last && precedence(operators.last) > precedence(e_exp)
+            require 'pry'; binding.pry if operators.last.nil?
             out << operators.pop
           end
           operators << e_exp
         else
+          require 'pry'; binding.pry if e_exp.nil?
           out << e_exp
         end
       end
@@ -437,18 +453,31 @@ module LogStash; module Config; module AST
       stack = []
       expr = []
       x = false
+      puts "reach #{out.size} #{JRUBY_VERSION} #{RUBY_VERSION}"
+      begin
+        raise "foo"
+      rescue => e
+        puts "BLEN: #{e.backtrace.size}"
+      end
       out.each do |e|
+        puts "EProc #{e} | #{self.text_value}"
+
         if e.is_a?(Symbol)
-          x = 1
           rval, lval = stack.pop, stack.pop
+          puts "JCONV"
           stack << jconvert([e, lval, rval])
+          puts "ENDJCONV"
+        elsif e.nil?
+          # noop
         else
           stack << e
         end
       end
+      puts "EDONE"
+
 
       if stack.size > 1
-        raise "Stack size should never be > than 1!"
+        require 'binding.pry'
       end
       return stack.first
     end
@@ -456,25 +485,31 @@ module LogStash; module Config; module AST
 
   module Expression
     def expr
-      return self.value if self.respond_to?(:value)
+      if defined?(super)
+        return super
+      end
 
-      self.recursive_select(Condition, Expression).map {|e| e.respond_to?(:value) ? e.value : e.expr }.first
+      exprs = self.recursive_select_expr_parts
+      raise "Exprs should only have one part!" if exprs.size != 1
+      exprs.first
     end
   end
 
   module NegativeExpression
     include JDSL
 
-    def value
-      jdsl.eNot(source_meta, self.recursive_select(Condition).map(&:expr).first)
+    def expr
+      exprs = self.recursive_select_expr_parts
+      raise "Negative exprs should only have one part!" if exprs.size != 1
+      jdsl.eNot(source_meta, exprs.first)
     end
   end
 
   module ComparisonExpression
     include JDSL
 
-    def value
-      lval, comparison_method, rval = self.recursive_select(Selector, ComparisonOperator, Number, String).map(&:expr)
+    def expr
+      lval, comparison_method, rval = self.recursive_select(Selector, Expression, ComparisonOperator, Number, String).map(&:expr)
       comparison_method.call(source_meta, lval, rval)
     end
   end
@@ -482,7 +517,7 @@ module LogStash; module Config; module AST
   module InExpression
     include JDSL
 
-    def value # Because this is somehow higher up the inheritance chain than Expression
+    def expr # Because this is somehow higher up the inheritance chain than Expression
       item, list = recursive_select(LogStash::Config::AST::RValue)
       jdsl.eIn(source_meta, item.expr, list.expr)
     end
@@ -491,7 +526,7 @@ module LogStash; module Config; module AST
   module NotInExpression
     include JDSL
 
-    def value
+    def expr
       item, list = recursive_select(LogStash::Config::AST::RValue)
       jdsl.eNot(source_meta, jdsl.eIn(item.expr, list.expr))
     end
@@ -506,7 +541,7 @@ module LogStash; module Config; module AST
   end
 
   class RegexpExpression < Node
-    def value
+    def expr
       selector, operator_method, regexp = recursive_select(Selector, LogStash::Config::AST::RegExpOperator, LogStash::Config::AST::RegExp).map(&:expr)
 
       raise "Expected a selector #{text_value}!" unless selector
