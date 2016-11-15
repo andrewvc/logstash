@@ -11,6 +11,7 @@ import java.util.stream.Collectors;
  * Created by andrewvc on 9/15/16.
  */
 public class IfVertex extends Vertex {
+    private final String id;
 
     public BooleanExpression getBooleanExpression() {
         return booleanExpression;
@@ -20,6 +21,7 @@ public class IfVertex extends Vertex {
 
     public IfVertex(SourceMetadata meta, BooleanExpression booleanExpression) {
         super(meta);
+        this.id = UUID.randomUUID().toString();
         this.booleanExpression = booleanExpression;
     }
 
@@ -58,6 +60,16 @@ public class IfVertex extends Vertex {
         return (e instanceof BooleanEdge);
     }
 
+    @Override
+    public String getId() {
+        return id;
+    }
+
+    @Override
+    public String specialTypeString() {
+        return "conditional";
+    }
+
     public List<BooleanEdge> getOutgoingBooleanEdges() {
         // Wish there was a way to do this as a java a cast without an operation
         return getOutgoingEdges().stream().map(e -> (BooleanEdge) e).collect(Collectors.toList());
@@ -65,5 +77,16 @@ public class IfVertex extends Vertex {
 
     public List<BooleanEdge> getOutgoingBooleanEdgesByType(Boolean edgeType) {
         return getOutgoingBooleanEdges().stream().filter(e -> e.getEdgeType().equals(edgeType)).collect(Collectors.toList());
+    }
+
+    // The easiest readable version of this for a human.
+    // If the original source is available we use that, otherwise we serialize the expression
+    public String humanReadableExpression() {
+        String sourceText = this.getMeta() != null ? this.getMeta().getSourceText() : null;
+        if (sourceText != null) {
+            return sourceText;
+        } else {
+            return this.getBooleanExpression().toRubyString();
+        }
     }
 }

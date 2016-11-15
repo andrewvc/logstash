@@ -114,6 +114,7 @@ class LogStash::Agent
             n.gauge(:last_error, { :message => e.message, :backtrace => e.backtrace})
             n.gauge(:last_failure_timestamp, LogStash::Timestamp.now)
           end
+          require 'pry'; binding.pry
           @logger.error(I18n.t("oops"), :message => e.message, :class => e.class.name, :backtrace => e.backtrace)
         end
       end

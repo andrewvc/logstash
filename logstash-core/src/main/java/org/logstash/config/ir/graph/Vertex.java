@@ -101,4 +101,8 @@ public abstract class Vertex implements ISourceComponent {
     public boolean acceptsOutgoingEdge(Edge e) {
         return true;
     }
+
+    public abstract String getId();
+
+    public abstract String specialTypeString();
 }

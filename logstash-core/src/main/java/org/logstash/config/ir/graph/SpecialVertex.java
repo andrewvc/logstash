@@ -2,19 +2,38 @@ package org.logstash.config.ir.graph;
 
 import org.logstash.config.ir.ISourceComponent;
 
+import java.util.UUID;
+
 /**
  * Created by andrewvc on 9/15/16.
  */
 public class SpecialVertex extends Vertex {
     private final Type type;
+    private final String id;
 
     public SpecialVertex() {
         super(null);
+        this.id = UUID.randomUUID().toString();
         this.type = Type.QUEUE;
+    }
+
+    @Override
+    public String getId() {
+        return id;
+    }
+
+    @Override
+    public String specialTypeString() {
+        return "special";
+    }
+
+    public Type getType() {
+        return type;
     }
 
     public SpecialVertex(Type type) {
         super(null);
+        this.id = UUID.randomUUID().toString();
         this.type = type;
 
     }

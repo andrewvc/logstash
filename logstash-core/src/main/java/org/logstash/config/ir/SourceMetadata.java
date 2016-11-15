@@ -1,23 +1,29 @@
 package org.logstash.config.ir;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 /**
  * Created by andrewvc on 9/6/16.
  */
 public class SourceMetadata {
     private final String sourceFile;
 
+    @JsonProperty("source_file")
     public String getSourceFile() {
         return sourceFile;
     }
 
+    @JsonProperty("source_line")
     public Integer getSourceLine() {
         return sourceLine;
     }
 
+    @JsonProperty("source_column")
     public Integer getSourceColumn() {
         return sourceColumn;
     }
 
+    @JsonProperty("source_text")
     public String getSourceText() {
         return sourceText;
     }

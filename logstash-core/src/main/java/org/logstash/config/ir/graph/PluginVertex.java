@@ -19,6 +19,11 @@ public class PluginVertex extends Vertex {
     }
 
     @Override
+    public String specialTypeString() {
+        return "plugin";
+    }
+
+    @Override
     public SourceMetadata getMeta() {
         return meta;
     }
