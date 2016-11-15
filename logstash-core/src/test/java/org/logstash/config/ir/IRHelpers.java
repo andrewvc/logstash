@@ -10,6 +10,10 @@ import org.logstash.config.ir.graph.Graph;
 import org.logstash.config.ir.graph.Vertex;
 
 import java.util.HashMap;
+import java.util.UUID;
+
+import static org.logstash.config.ir.DSL.*;
+import static org.logstash.config.ir.PluginDefinition.Type.*;
 
 /**
  * Created by andrewvc on 9/19/16.
@@ -26,7 +30,18 @@ public class IRHelpers {
     }
 
     public static Vertex testVertex() {
+        String id = UUID.randomUUID().toString();
         return new Vertex() {
+            @Override
+            public String getId() {
+                return id;
+            }
+
+            @Override
+            public String typeString() {
+                return "testVertex";
+            }
+
             @Override
             public boolean sourceComponentEquals(ISourceComponent sourceComponent) {
                 return this.equals(sourceComponent);
@@ -54,5 +69,19 @@ public class IRHelpers {
 
     public static PluginDefinition testPluginDefinition() {
         return new PluginDefinition(PluginDefinition.Type.FILTER, "testDefinition", new HashMap<String, Object>());
+    }
+
+    public static Pipeline samplePipeline() throws InvalidIRException {
+        Graph inputSection = iComposeParallel(iPlugin(INPUT, "generator"), iPlugin(INPUT, "stdin")).toGraph();
+        Graph filterSection = iIf(eEq(eEventValue("[foo]"), eEventValue("[bar]")),
+                                    iPlugin(FILTER, "grok"),
+                                    iPlugin(FILTER, "kv")).toGraph();
+        Graph outputSection = iIf(eGt(eEventValue("[baz]"), eValue(1000)),
+                                    iComposeParallel(
+                                            iPlugin(OUTPUT, "s3"),
+                                            iPlugin(OUTPUT, "elasticsearch")),
+                                    iPlugin(OUTPUT, "stdout")).toGraph();
+
+        return new Pipeline(inputSection, filterSection, outputSection);
     }
 }

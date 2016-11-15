@@ -20,7 +20,7 @@ public class PlainEdgeTest {
     }
 
     @Test
-    public void testFactoryCreationDoesNotRaiseException(Boolean edgeType) throws InvalidIRException {
+    public void testFactoryCreationDoesNotRaiseException() throws InvalidIRException {
         PlainEdge.PlainEdgeFactory factory = new PlainEdge.PlainEdgeFactory();
         PlainEdge e = factory.make(testVertex(), testVertex());
     }

@@ -285,8 +285,10 @@ class LogStash::Runner < Clamp::StrictCommand
   rescue => e
     # if logger itself is not initialized
     if LogStash::Logging::Logger.get_logging_context.nil?
+      require 'pry'; binding.pry
       $stderr.puts "#{I18n.t("oops")} :error => #{e}, :backtrace => #{e.backtrace}"
     else
+      require 'pry'; binding.pry
       logger.fatal(I18n.t("oops"), :error => e, :backtrace => e.backtrace)
     end
     return 1

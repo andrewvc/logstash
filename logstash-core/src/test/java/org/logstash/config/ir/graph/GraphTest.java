@@ -94,7 +94,18 @@ public class GraphTest {
     }
 
     public Vertex testVertex(String name) {
+        String id = UUID.randomUUID().toString();
         return new Vertex() {
+            @Override
+            public String getId() {
+                return id;
+            }
+
+            @Override
+            public String typeString() {
+                return "TestVertex";
+            }
+
             public String toString() {
                 return "TestVertex-" + name;
             }

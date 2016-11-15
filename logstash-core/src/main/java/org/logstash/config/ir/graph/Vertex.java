@@ -129,5 +129,7 @@ public abstract class Vertex implements ISourceComponent {
         return true;
     }
 
+    public abstract String getId();
 
+    public abstract String typeString();
 }
