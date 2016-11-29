@@ -13,6 +13,7 @@ module LogStash
           serialized = org.logstash.config.serializers.lsui.LSUIPipelineSerializer.serialize(pipeline)
           
           response = LogStash::Json.load(serialized)
+          response["start_time_in_millis"] = factory.build(:stats).started_at
           response["plugins"] = factory.build(:plugins_command).run()
           
           stats_by_id = factory.build(:stats).
@@ -29,6 +30,7 @@ module LogStash
               }
             end
           end
+          
           
           # TODO: Remove this before release!
           headers["Access-Control-Allow-Origin"] = "*"

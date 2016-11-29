@@ -13,8 +13,15 @@ public class SpecialVertex extends Vertex {
 
     public SpecialVertex() {
         super(null);
-        this.id = UUID.randomUUID().toString();
+        this.id = "special-" + Type.QUEUE.toString();
         this.type = Type.QUEUE;
+    }
+
+    public SpecialVertex(Type type) {
+        super(null);
+        this.id = "special-" + type.toString();
+        this.type = type;
+
     }
 
     @Override
@@ -29,13 +36,6 @@ public class SpecialVertex extends Vertex {
 
     public Type getType() {
         return type;
-    }
-
-    public SpecialVertex(Type type) {
-        super(null);
-        this.id = UUID.randomUUID().toString();
-        this.type = type;
-
     }
 
     public enum Type {

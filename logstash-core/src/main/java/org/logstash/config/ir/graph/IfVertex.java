@@ -21,7 +21,9 @@ public class IfVertex extends Vertex {
 
     public IfVertex(SourceMetadata meta, BooleanExpression booleanExpression) {
         super(meta);
-        this.id = UUID.randomUUID().toString();
+        this.id = "if-" +
+                (meta != null ? Integer.toString(meta.hashCode()) : UUID.randomUUID().toString())
+                + "-" + Integer.toString(booleanExpression.toRubyString().hashCode());
         this.booleanExpression = booleanExpression;
     }
 

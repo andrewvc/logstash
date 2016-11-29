@@ -2,6 +2,8 @@ package org.logstash.config.ir;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 
+import java.util.Objects;
+
 /**
  * Created by andrewvc on 9/6/16.
  */
@@ -44,6 +46,10 @@ public class SourceMetadata {
         this.sourceLine = null;
         this.sourceColumn = null;
         this.sourceText = null;
+    }
+
+    public int hashCode() {
+        return Objects.hash(this.sourceFile, this.sourceLine, this.sourceColumn, this.sourceText);
     }
 
     public String toString() {

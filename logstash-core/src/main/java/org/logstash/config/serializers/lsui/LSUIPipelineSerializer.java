@@ -84,7 +84,7 @@ public class LSUIPipelineSerializer {
 
             if (e instanceof BooleanEdge) {
                 BooleanEdge be = (BooleanEdge) e;
-                jgen.writeBooleanField("when", be.getEdgeType().booleanValue());
+                jgen.writeBooleanField("when", be.getEdgeType());
             }
 
             jgen.writeEndObject();
@@ -106,7 +106,7 @@ public class LSUIPipelineSerializer {
         PluginDefinition pluginDefinition = v.getPluginDefinition();
 
         jgen.writeStringField("config_name", v.getPluginDefinition().getName());
-        jgen.writeStringField("type", v.getPluginDefinition().getType().toString().toLowerCase());
+        jgen.writeStringField("plugin_type", v.getPluginDefinition().getType().toString().toLowerCase());
 
         writeComplexObject("arguments", pluginDefinition.getArguments(), jgen);
     }
