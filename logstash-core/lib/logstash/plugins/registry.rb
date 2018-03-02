@@ -151,11 +151,19 @@ module LogStash module Plugins
         end
 
         raise LoadError, "No plugin found with name '#{plugin_name}'" unless plugin_spec
+<<<<<<< HEAD
 
         if block_given? # if provided pass a block to do validation
           raise LoadError, "Block validation fails for plugin named #{plugin_name} of type #{type}," unless block.call(plugin_spec.klass, plugin_name)
         end
 
+=======
+
+        if block_given? # if provided pass a block to do validation
+          raise LoadError, "Block validation fails for plugin named #{plugin_name} of type #{type}," unless block.call(plugin_spec.klass, plugin_name)
+        end
+
+>>>>>>> Allow pipeline lifecycles to operate on separate threads simultaneously
         return plugin_spec.klass
       end
     end
