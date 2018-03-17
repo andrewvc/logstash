@@ -1,9 +1,27 @@
 package org.logstash;
 
+import org.jruby.Ruby;
+import org.jruby.runtime.builtin.IRubyObject;
+
 public final class Accessors {
 
     private Accessors() {
         //Utility Class
+    }
+
+    public static IRubyObject getRuby(final Ruby runtime, final ConvertedMap data, final FieldReference field) {
+        final Object target = findParent(data, field);
+        if (target == null) return null;
+        String root = field.getRoot();
+
+        boolean isCow = data.rubyDeCow(runtime, root);
+        if (isCow) {
+            // No further conversions needed, we decowed to ruby
+            // We are guaranteed to have an IRubyObject here
+            return (IRubyObject) fetch(target, field.getKey());
+        } else {
+            return Rubyfier.deep(runtime, fetch(target, field.getKey()));
+        }
     }
 
     public static Object get(final ConvertedMap data, final FieldReference field) {

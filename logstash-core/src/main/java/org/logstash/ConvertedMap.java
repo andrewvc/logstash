@@ -5,6 +5,7 @@ import java.lang.ref.WeakReference;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import org.jruby.Ruby;
 import org.jruby.RubyHash;
 import org.jruby.RubyString;
 import org.jruby.runtime.ThreadContext;
@@ -139,13 +140,32 @@ public final class ConvertedMap extends IdentityHashMap<String, Object> {
         String root = field.getRoot();
         boolean removed = cowKeys.remove(root);
         if (removed) {
-            FieldReference rootFieldRef = FieldReference.from(field.getRoot());
+            FieldReference rootFieldRef = FieldReference.from(root);
             Object original = get(rootFieldRef.getKey());
             Object clone = Cloner.deep(original);
             if (clone instanceof Map && !(clone instanceof ConvertedMap)) {
                 clone = ConvertedMap.newFromMap((Map<String, Object>) clone);
             }
             putInternedCowUnsafe(rootFieldRef.getKey(), clone);
+        }
+    }
+
+    public boolean fieldIsCow(String field) {
+        return cowKeys.contains(field);
+    }
+
+    boolean rubyDeCow(Ruby runtime, String field) {
+        if (!cowKeys.contains(field)) return false;
+
+        IRubyObject cloned = Rubyfier.deepClone(runtime, get(field));
+        put(field, cloned);
+
+        return true;
+    }
+
+    public void rubyDeCow(Ruby runtime) {
+        for (String key : cowKeys) {
+            rubyDeCow(runtime, key);
         }
     }
 }

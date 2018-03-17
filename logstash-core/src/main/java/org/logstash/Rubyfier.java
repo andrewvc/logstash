@@ -5,6 +5,8 @@ import java.math.BigInteger;
 import java.util.Collection;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.BiFunction;
+
 import org.jruby.Ruby;
 import org.jruby.RubyArray;
 import org.jruby.RubyBignum;
@@ -21,15 +23,18 @@ import org.logstash.ext.JrubyTimestampExtLibrary;
 
 public final class Rubyfier {
 
-    private static final Rubyfier.Converter IDENTITY = (runtime, input) -> (IRubyObject) input;
+    private static final Transformer IDENTITY = (runtime, input) -> (IRubyObject) input;
 
-    private static final Rubyfier.Converter FLOAT_CONVERTER =
+    private static final Transformer FLOAT_CONVERTER =
         (runtime, input) -> runtime.newFloat(((Number) input).doubleValue());
 
-    private static final Rubyfier.Converter LONG_CONVERTER =
+    private static final Transformer LONG_CONVERTER =
         (runtime, input) -> runtime.newFixnum(((Number) input).longValue());
 
-    private static final Map<Class<?>, Rubyfier.Converter> CONVERTER_MAP = initConverters();
+    private static final Map<Class<?>, Transformer> CONVERTER_MAP = initConverters();
+
+    private static final Map<Class<?>, Transformer> CLONER_MAP = initCloners();
+
 
     /**
      * Rubyfier.deep() is called by JrubyEventExtLibrary RubyEvent ruby_get_field,
@@ -48,31 +53,73 @@ public final class Rubyfier {
             return runtime.getNil();
         }
         final Class<?> cls = input.getClass();
-        final Rubyfier.Converter converter = CONVERTER_MAP.get(cls);
+        final Transformer converter = CONVERTER_MAP.get(cls);
         if (converter != null) {
             return converter.convert(runtime, input);
         }
-        return fallbackConvert(runtime, input, cls);
+        return fallbackTransform(runtime, input, cls, CONVERTER_MAP);
+    }
+
+    public static IRubyObject deepClone(final Ruby runtime, final Object input) {
+        if (input == null) {
+            return runtime.getNil();
+        }
+
+        final Class<?> cls = input.getClass();
+        final Transformer cloner = CLONER_MAP.get(cls);
+        if (cloner != null) {
+            return cloner.convert(runtime, input);
+        }
+        return fallbackTransform(runtime, input, cls, CLONER_MAP);
     }
 
     private static RubyArray deepList(final Ruby runtime, final Collection<?> list) {
+        return deepListTransform(runtime, list, Rubyfier::deep);
+    }
+
+    private static RubyArray deepListClone(final Ruby runtime, final Collection<?> list) {
+        return deepListTransform(runtime, list, Rubyfier::deepClone);
+    }
+
+    private static RubyArray deepListTransform(final Ruby runtime, final Collection<?> list, BiFunction<Ruby, Object, IRubyObject> fn) {
         final int length = list.size();
         final RubyArray array = runtime.newArray(length);
         for (final Object item : list) {
-            array.add(deep(runtime, item));
+            array.add(fn.apply(runtime, item));
         }
         return array;
     }
 
     private static RubyHash deepMap(final Ruby runtime, final Map<?, ?> map) {
+        return deepMapTransform(runtime, map, Rubyfier::deep);
+    }
+
+    /**
+     * Returns a deep copy of event data
+     * @param runtime
+     * @param map
+     * @return a new RubyHash of the data
+     */
+    private static RubyHash deepMapClone(final Ruby runtime, final Map<?, ?> map) {
+        return deepMapTransform(runtime, map, Rubyfier::deepClone);
+    }
+
+    /**
+     * Transforms every key of the map into a RubyHash, applying the given fn to each value
+     * @param runtime
+     * @param map
+     * @param fn
+     * @return RubyHash representing the value
+     */
+    private static RubyHash deepMapTransform(final Ruby runtime, final Map<?, ?> map, BiFunction<Ruby, Object, IRubyObject> fn) {
         final RubyHash hash = RubyHash.newHash(runtime);
         // Note: RubyHash.put calls JavaUtil.convertJavaToUsableRubyObject on keys and values
-        map.forEach((key, value) -> hash.put(key, deep(runtime, value)));
+        map.forEach((key, value) -> hash.put(key, fn.apply(runtime, value)));
         return hash;
     }
 
-    private static Map<Class<?>, Rubyfier.Converter> initConverters() {
-        final Map<Class<?>, Rubyfier.Converter> converters =
+    private static Map<Class<?>, Transformer> initConverters() {
+        final Map<Class<?>, Transformer> converters =
             new ConcurrentHashMap<>(50, 0.2F, 1);
         converters.put(RubyString.class, IDENTITY);
         converters.put(RubyNil.class, IDENTITY);
@@ -108,23 +155,61 @@ public final class Rubyfier {
         return converters;
     }
 
+    private static Map<Class<?>, Transformer> initCloners() {
+        final Map<Class<?>, Rubyfier.Transformer> cloners =
+            new ConcurrentHashMap<>(50, 0.2F, 1);
+        cloners.put(RubyString.class, (ruby,s) -> ((RubyString) s).rbClone());
+        cloners.put(RubyNil.class, IDENTITY);
+        cloners.put(RubySymbol.class, IDENTITY);
+        cloners.put(RubyBignum.class, IDENTITY);
+        cloners.put(RubyBigDecimal.class, IDENTITY);
+        cloners.put(RubyFloat.class, IDENTITY);
+        cloners.put(RubyFixnum.class, IDENTITY);
+        cloners.put(RubyBoolean.class, IDENTITY);
+        cloners.put(JrubyTimestampExtLibrary.RubyTimestamp.class, IDENTITY);
+        cloners.put(String.class, (runtime, input) -> runtime.newString((String) input));
+        cloners.put(Double.class, FLOAT_CONVERTER);
+        cloners.put(Float.class, FLOAT_CONVERTER);
+        cloners.put(Integer.class, LONG_CONVERTER);
+        cloners.put(
+            BigInteger.class, (runtime, value) -> RubyBignum.newBignum(runtime, (BigInteger) value)
+        );
+        cloners.put(
+            BigDecimal.class, (runtime, value) -> new RubyBigDecimal(runtime, (BigDecimal) value)
+        );
+        cloners.put(Long.class, LONG_CONVERTER);
+        cloners.put(Boolean.class, (runtime, input) -> runtime.newBoolean((Boolean) input));
+        cloners.put(Map.class, (runtime, input) -> deepMapClone(runtime, (Map<?, ?>) input));
+        cloners.put(
+            Collection.class, (runtime, input) -> deepListClone(runtime, (Collection<?>) input)
+        );
+        cloners.put(
+            Timestamp.class,
+            (runtime, input) -> JrubyTimestampExtLibrary.RubyTimestamp.newRubyTimestamp(
+                runtime, (Timestamp) input
+            )
+        );
+        return cloners;
+    }
+
+
     /**
      * Same principle as {@link Valuefier#fallbackConvert(Object, Class)}.
      */
-    private static IRubyObject fallbackConvert(final Ruby runtime, final Object o,
-        final Class<?> cls) {
-        for (final Map.Entry<Class<?>, Rubyfier.Converter> entry : CONVERTER_MAP.entrySet()) {
+    private static IRubyObject fallbackTransform(final Ruby runtime, final Object o,
+        final Class<?> cls, Map<Class<?>, Transformer> transformMap) {
+        for (final Map.Entry<Class<?>, Transformer> entry : transformMap.entrySet()) {
             if (entry.getKey().isAssignableFrom(cls)) {
-                final Rubyfier.Converter found = entry.getValue();
-                CONVERTER_MAP.put(cls, found);
+                final Transformer found = entry.getValue();
+                transformMap.put(cls, found);
                 return found.convert(runtime, o);
             }
         }
         throw new MissingConverterException(cls);
     }
 
-    private interface Converter {
-
+    // Interface for either transforming or cloning a ruby object
+    private interface Transformer {
         IRubyObject convert(Ruby runtime, Object input);
     }
 }

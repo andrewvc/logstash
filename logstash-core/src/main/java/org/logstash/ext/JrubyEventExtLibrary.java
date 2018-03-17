@@ -76,10 +76,8 @@ public final class JrubyEventExtLibrary {
         @JRubyMethod(name = "get", required = 1)
         public IRubyObject ruby_get_field(ThreadContext context, RubyString reference)
         {
-            return Rubyfier.deep(
-                context.runtime,
-                this.event.getUnconvertedField(FieldReference.from(reference.getByteList()))
-            );
+            FieldReference ref = FieldReference.from(reference.getByteList());
+            return this.event.getRubyValue(context.runtime, ref);
         }
 
         @JRubyMethod(name = "set", required = 2)
@@ -135,7 +133,7 @@ public final class JrubyEventExtLibrary {
         @JRubyMethod(name = "clone")
         public IRubyObject ruby_clone(ThreadContext context)
         {
-            return RubyEvent.newRubyEvent(context.runtime, this.event.clone());
+            return RubyEvent.newRubyEvent(context.runtime, this.event.cowClone());
         }
 
         @JRubyMethod(name = "overwrite", required = 1)

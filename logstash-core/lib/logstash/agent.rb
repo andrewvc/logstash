@@ -156,7 +156,13 @@ class LogStash::Agent
     converge_result = converge_state(pipeline_actions)
     update_metrics(converge_result)
 
-    report_currently_running_pipelines(converge_result)
+    logger.info(
+        "Pipelines running",
+        :count => running_pipelines.size,
+        :running_pipelines => running_pipelines.keys,
+        :non_running_pipelines => non_running_pipelines.keys
+    )
+
     dispatch_events(converge_result)
 
     converge_result
@@ -229,8 +235,8 @@ class LogStash::Agent
     pipelines.select {|id,pipeline| running_pipeline?(id) }
   end
 
-  def with_running_pipelines
-    yield running_pipelines
+  def non_running_pipelines
+    pipelines.select {|id,pipeline| !running_pipeline?(id) }
   end
 
   def running_pipelines?
@@ -293,7 +299,7 @@ class LogStash::Agent
         #
         # This give us a bit more extensibility with the current startup/validation model
         # that we currently have.
-        var = begin
+        begin
           logger.debug("Executing action", :action => action)
           action_result = action.execute(self, pipelines)
           converge_result.add(action, action_result)
@@ -309,7 +315,6 @@ class LogStash::Agent
           logger.error("Failed to execute action", :action => action, :exception => e.class.name, :message => e.message, :backtrace => e.backtrace)
           converge_result.add(action, e)
         end
-        var
       end
     end
     threads.each(&:join)
@@ -325,15 +330,6 @@ class LogStash::Agent
 
   def resolve_actions(pipeline_configs)
     @state_resolver.resolve(@pipelines, pipeline_configs)
-  end
-
-  def report_currently_running_pipelines(converge_result)
-    if converge_result.success? && converge_result.total > 0
-      running_pipelines do |pipelines|
-        number_of_running_pipeline = pipelines.size
-        logger.info("Pipelines running", :count => number_of_running_pipeline, :pipelines => pipelines.values.collect(&:pipeline_id) )
-      end
-    end
   end
 
   def dispatch_events(converge_results)

@@ -47,7 +47,7 @@ module LogStash module PipelineAction
 
       logger.info("Reloading pipeline", "pipeline.id" => pipeline_id)
 
-      pipelines.compute(pipeline_id) do |k,pipeline|
+      pipelines.compute(pipeline_id) do |_,pipeline|
         status = Stop.new(pipeline_id).execute(agent, pipelines)
 
         if status
