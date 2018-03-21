@@ -72,7 +72,8 @@ public class AddressState {
         return (input == null) && outputs.isEmpty();
     }
 
-    public boolean hasOutput(PipelineOutput output) {
+    // Just for tests
+    boolean hasOutput(PipelineOutput output) {
         return outputs.contains(output);
     }
 }
