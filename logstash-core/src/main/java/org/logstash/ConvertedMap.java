@@ -51,7 +51,7 @@ public final class ConvertedMap extends IdentityHashMap<String, Object> {
         super(size);
     }
 
-    ConvertedMap(ConvertedMap cowParent) {
+    private ConvertedMap(ConvertedMap cowParent) {
         super(cowParent.size());
     }
 
@@ -59,7 +59,7 @@ public final class ConvertedMap extends IdentityHashMap<String, Object> {
      * Creates a shallow copy of an Event
      * @return
      */
-    public ConvertedMap cowCopy() {
+    public ConvertedMap cowClone() {
         ConvertedMap copy = new ConvertedMap(this);
         this.cowKeys = new HashSet<>();
         copy.cowKeys = new HashSet<>();
@@ -134,7 +134,7 @@ public final class ConvertedMap extends IdentityHashMap<String, Object> {
         return FieldReference.from(key.getByteList()).getKey();
     }
 
-    public void deCow(FieldReference field) {
+    void deCow(final FieldReference field) {
         if (cowKeys == null) return;
         String root = field.getRoot();
         boolean removed = cowKeys.remove(root);
@@ -143,7 +143,7 @@ public final class ConvertedMap extends IdentityHashMap<String, Object> {
             Object original = get(rootFieldRef.getKey());
             Object clone = Cloner.deep(original);
             if (clone instanceof Map && !(clone instanceof ConvertedMap)) {
-                clone = ConvertedMap.newFromMap((Map) clone);
+                clone = ConvertedMap.newFromMap((Map<String, Object>) clone);
             }
             putInternedCowUnsafe(rootFieldRef.getKey(), clone);
         }

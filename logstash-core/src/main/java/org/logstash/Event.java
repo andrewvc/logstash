@@ -9,7 +9,6 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -283,7 +282,7 @@ public final class Event implements Cloneable, Queueable {
      * @return
      */
     public Event cowClone() {
-        return new Event(data.cowCopy(), metadata.cowCopy());
+        return new Event(data.cowClone(), metadata.cowClone());
     }
 
     public String toString() {

@@ -1,7 +1,7 @@
 module ::LogStash::Plugins::Builtin
-  require 'logstash/plugins/builtin/internal/input'
-  require 'logstash/plugins/builtin/internal/output'
+  require 'logstash/plugins/builtin/pipeline/input'
+  require 'logstash/plugins/builtin/pipeline/output'
 
-  LogStash::PLUGIN_REGISTRY.add(:input, "internal", LogStash::Plugins::Builtin::Internal::Input)
-  LogStash::PLUGIN_REGISTRY.add(:output, "internal", LogStash::Plugins::Builtin::Internal::Output)
+  LogStash::PLUGIN_REGISTRY.add(:input, "pipeline", LogStash::Plugins::Builtin::Pipeline::Input)
+  LogStash::PLUGIN_REGISTRY.add(:output, "pipeline", LogStash::Plugins::Builtin::Pipeline::Output)
 end

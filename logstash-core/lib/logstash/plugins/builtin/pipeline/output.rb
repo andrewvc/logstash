@@ -1,7 +1,7 @@
-module ::LogStash; module Plugins; module Builtin; module Internal; class Output < ::LogStash::Outputs::Base
-  include org.logstash.plugins.internal.InternalOutput
+module ::LogStash; module Plugins; module Builtin; module Pipeline; class Output < ::LogStash::Outputs::Base
+  include org.logstash.plugins.pipeline.PipelineOutput
 
-  config_name "internal"
+  config_name "pipeline"
 
   concurrency :shared
 
@@ -9,7 +9,7 @@ module ::LogStash; module Plugins; module Builtin; module Internal; class Output
 
   def register
     @address_receivers = java.util.concurrent.ConcurrentHashMap.new
-    org.logstash.plugins.internal.Common.register_sender(@send_to, self)
+    org.logstash.plugins.pipeline.Common.registerSender(self, @send_to)
   end
 
   def updateAddressReceiver(address, function)
@@ -26,7 +26,7 @@ module ::LogStash; module Plugins; module Builtin; module Internal; class Output
       events.each do |e|
         event_clone = e.clone;
         while !apply_address_receiver(address, event_clone)
-          byRunState = org.logstash.plugins.internal.Common.addressesByRunState
+          byRunState = org.logstash.plugins.pipeline.Common.addressesByRunState
           @logger.info(
             NO_LISTENER_LOG_MESSAGE,
             :destination_address => address,
@@ -48,14 +48,16 @@ module ::LogStash; module Plugins; module Builtin; module Internal; class Output
   end
 
   def close
-    # Tried to do this with a static method on Common, but somehow jruby kept saying there weren't
-    # enough arguments provided for reasons that make no sense. Probable JRuby bug here
-    @send_to.each do |address|
-        org.logstash.plugins.internal.Common.ADDRESS_STATES.compute(address, proc {|a, state|
-          state.getOutputs.remove(self);
-          return state;
-      })
-      output.removeAddressReceiver(address);
-    end
+    # We SHOULD be able to invoke this static method, but due to a JRuby bug it just won't call without an exception
+    # Pipeline aborted due to error {:pipeline_id=>"sender", :exception=>#<ArgumentError: wrong number of arguments (1 for 2)>
+    # For some reason JRuby refuses to understand the correct arity here
+    org.logstash.plugins.pipeline.Common.unregisterSender(self)
+    #@send_to.forEach do |address|
+    #  org.logstash.plugins.pipeline.Common.ADDRESS_STATES.compute(address) do |a, state|
+    #      state.removeOutput(self)
+    #      state
+    #  end
+    #  self.removeAddressReceiver(address)
+    #end
   end
 end; end; end; end; end
