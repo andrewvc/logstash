@@ -22,9 +22,6 @@ public class AddressState {
      * @return
      */
     public boolean addOutput(PipelineOutput output) {
-        if (this.input != null) {
-            output.updateAddressReceiver(address, input::internalReceive);
-        }
         return outputs.add(output);
     }
 
@@ -43,10 +40,7 @@ public class AddressState {
      */
     public boolean assignInputIfMissing(PipelineInput newInput) {
         if (input != newInput && input != null) return false;
-
         this.input = newInput;
-        this.outputs.forEach(output -> output.updateAddressReceiver(address, newInput::internalReceive));
-
         return true;
     }
 
@@ -73,5 +67,9 @@ public class AddressState {
     // Just for tests
     boolean hasOutput(PipelineOutput output) {
         return outputs.contains(output);
+    }
+
+    public Set<PipelineOutput> getOutputs() {
+        return outputs;
     }
 }

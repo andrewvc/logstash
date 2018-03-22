@@ -93,14 +93,14 @@ public class PipelineBusTest {
     public void listenUnlistenUpdatesOutputReceivers() {
         bus.registerSender(output, addresses);
         bus.listen(input, address);
-        output.receivers.get(address).apply(rubyEvent());
+        output.receivers.get(address).internalReceive(rubyEvent());
         assertThat(input.eventCount).isEqualTo(1);
 
         bus.unlisten(input, address);
 
         TestPipelineInput newInput = new TestPipelineInput();
         bus.listen(newInput, address);
-        output.receivers.get(address).apply(rubyEvent());
+        output.receivers.get(address).internalReceive(rubyEvent());
 
         // The new event went to the new input, not the old one
         assertThat(newInput.eventCount).isEqualTo(1);
@@ -128,16 +128,11 @@ public class PipelineBusTest {
     }
 
     static class TestPipelineOutput implements PipelineOutput {
-        public Map<String, Function<JrubyEventExtLibrary.RubyEvent, Boolean>> receivers = new HashMap<>();
+        public Map<String, PipelineInput> receivers = new HashMap<>();
 
         @Override
-        public void updateAddressReceiver(String address, Function<JrubyEventExtLibrary.RubyEvent, Boolean> receiverFn) {
-            receivers.put(address, receiverFn);
-        }
-
-        @Override
-        public void removeAddressReceiver(String address) {
-            receivers.remove(address);
+        public void updateAddressReceivers(Map<String, PipelineInput> map) {
+            receivers = map;
         }
     }
 }

@@ -133,7 +133,11 @@ public final class JrubyEventExtLibrary {
         @JRubyMethod(name = "clone")
         public IRubyObject ruby_clone(ThreadContext context)
         {
-            return RubyEvent.newRubyEvent(context.runtime, this.event.cowClone());
+            return ruby_clone(context.runtime);
+        }
+
+        public RubyEvent ruby_clone(Ruby ruby) {
+            return RubyEvent.newRubyEvent(ruby, this.event.cowClone());
         }
 
         @JRubyMethod(name = "overwrite", required = 1)
@@ -305,5 +309,7 @@ public final class JrubyEventExtLibrary {
             final long sequence = SEQUENCE_GENERATOR.incrementAndGet();
             return (int) (sequence ^ sequence >>> 32) + 31;
         }
+
+
     }
 }

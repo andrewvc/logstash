@@ -1,5 +1,10 @@
 package org.logstash.plugins.pipeline;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+import org.logstash.RubyUtil;
+import org.logstash.ext.JrubyEventExtLibrary;
+
 import java.util.*;
 
 /**
@@ -12,6 +17,34 @@ import java.util.*;
  */
 public class PipelineBus {
     final HashMap<String, AddressState> addressStates = new HashMap<>();
+
+    private static final Logger logger = LogManager.getLogger(PipelineBus.class);
+
+    public void sendEvents(Iterable<JrubyEventExtLibrary.RubyEvent> events, Map<String, PipelineInput> addressReceivers, boolean ensureDelivery) {
+        for (JrubyEventExtLibrary.RubyEvent event : events) {
+            sendEvent(event, addressReceivers, ensureDelivery);
+        }
+    }
+
+    public void sendEvent(JrubyEventExtLibrary.RubyEvent event, Map<String, PipelineInput> addressesReceivers, boolean ensureDelivery) {
+        addressesReceivers.forEach( (address, input) -> {
+            JrubyEventExtLibrary.RubyEvent clone = event.ruby_clone(RubyUtil.RUBY);
+
+            boolean sendWasSuccess;
+            sendWasSuccess = input.internalReceive(clone);
+
+            while (ensureDelivery && !sendWasSuccess) {
+                String message = String.format("Attempted to send event to '%s' but that address was unavailable. " +
+                        "Maybe the destination pipeline is down or stopping? Will Retry.", address);
+                logger.warn(message);
+                try {
+                    Thread.sleep(1000);
+                } catch (InterruptedException e) {
+                    logger.error("Sleep unexpectedly interrupted in bus retry loop", e);
+                }
+            }
+        });
+    }
 
     /**
      * Calculate a summary of addresses, binned by run state
@@ -39,6 +72,8 @@ public class PipelineBus {
             final AddressState state = addressStates.computeIfAbsent(address, AddressState::new);
             state.addOutput(output);
         });
+
+        updateOutputReceivers(output);
     }
 
     /**
@@ -48,14 +83,23 @@ public class PipelineBus {
      */
     public synchronized void unregisterSender(final PipelineOutput output, final Iterable<String> addresses) {
         addresses.forEach(address -> {
-            output.removeAddressReceiver(address);
-
             final AddressState state = addressStates.get(address);
             if (state != null) {
                 state.removeOutput(output);
                 if (state.isEmpty()) addressStates.remove(address);
             }
         });
+
+        output.updateAddressReceivers(Collections.emptyMap());
+    }
+
+    private synchronized void updateOutputReceivers(final PipelineOutput output) {
+        Map<String, PipelineInput> receivers = new HashMap<>();
+        addressStates.forEach( (address, state) -> {
+            if (state.hasOutput(output) && state.getInput() != null) receivers.put(address, state.getInput());
+        });
+
+        output.updateAddressReceivers(receivers);
     }
 
     /**
@@ -67,7 +111,11 @@ public class PipelineBus {
      */
     public synchronized boolean listen(final PipelineInput input, final String address) {
         final AddressState state = addressStates.computeIfAbsent(address, AddressState::new);
-        return state.assignInputIfMissing(input);
+        if (state.assignInputIfMissing(input)) {
+            state.getOutputs().forEach(this::updateOutputReceivers);
+            return true;
+        }
+        return false;
     }
 
     /**
@@ -81,6 +129,7 @@ public class PipelineBus {
             state.unassignInput(input);
             if (state.isEmpty()) addressStates.remove(address);
         }
+        state.getOutputs().forEach(this::updateOutputReceivers);
     }
 
     /**
