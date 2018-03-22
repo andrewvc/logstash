@@ -155,7 +155,7 @@ public final class ConvertedMap extends IdentityHashMap<String, Object> {
     }
 
     boolean rubyDeCow(Ruby runtime, String field) {
-        if (!cowKeys.contains(field)) return false;
+        if (cowKeys == null || !cowKeys.contains(field)) return false;
 
         IRubyObject cloned = Rubyfier.deepClone(runtime, get(field));
         put(field, cloned);
