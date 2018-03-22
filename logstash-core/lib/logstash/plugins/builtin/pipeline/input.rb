@@ -5,11 +5,14 @@ module ::LogStash; module Plugins; module Builtin; module Pipeline; class Input 
 
   config :address, :validate => :string, :required => true
 
+  attr_reader :pipeline_bus
+
   def register
     # May as well set this up here, writers won't do anything until
     # @running is set to false
     @running = java.util.concurrent.atomic.AtomicBoolean.new(false)
-    listen_successful = org.logstash.plugins.pipeline.Common.listen(self, address)
+    @pipeline_bus = execution_context.agent.pipeline_bus
+    listen_successful = pipeline_bus.listen(self, address)
     if !listen_successful
       raise ::LogStash::ConfigurationError, "Internal input at '#{@address}' already bound! Addresses must be globally unique across pipelines."
     end
@@ -42,7 +45,7 @@ module ::LogStash; module Plugins; module Builtin; module Pipeline; class Input 
   def stop
     # We stop receiving events before we unlisten to prevent races
     @running.set(false) if @running # If register wasn't yet called, no @running!
-    org.logstash.plugins.pipeline.Common.unlisten(self, address)
+    pipeline_bus.unlisten(self, address)
   end
 
   def isRunning

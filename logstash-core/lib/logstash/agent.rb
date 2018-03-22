@@ -25,7 +25,7 @@ class LogStash::Agent
   include LogStash::Util::Loggable
   STARTED_AT = Time.now.freeze
 
-  attr_reader :metric, :name, :settings, :webserver, :dispatcher, :ephemeral_id, :pipelines
+  attr_reader :metric, :name, :settings, :webserver, :dispatcher, :ephemeral_id, :pipelines, :pipeline_bus
   attr_accessor :logger
 
   # initialize method for LogStash::Agent
@@ -38,6 +38,9 @@ class LogStash::Agent
     @settings = settings
     @auto_reload = setting("config.reload.automatic")
     @ephemeral_id = SecureRandom.uuid
+
+    # Special bus object for inter-pipelines communications. Used by the `pipeline` input/output
+    @pipeline_bus = org.logstash.plugins.pipeline.PipelineBus.new
 
     # Do not use @pipelines directly. Use #with_pipelines which does locking
     @pipelines = java.util.concurrent.ConcurrentHashMap.new();

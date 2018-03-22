@@ -2,7 +2,6 @@ package org.logstash.plugins.pipeline;
 
 import java.util.HashSet;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Class for representing the state of an internal address.
@@ -15,7 +14,6 @@ public class AddressState {
 
     AddressState(String address) {
         this.address = address;
-        this.input = input;
     }
 
     /**
