@@ -13,10 +13,7 @@ import java.util.Map;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.joda.time.DateTime;
-import org.jruby.Ruby;
-import org.jruby.RubyNil;
-import org.jruby.RubyString;
-import org.jruby.RubySymbol;
+import org.jruby.*;
 import org.jruby.runtime.builtin.IRubyObject;
 import org.logstash.ackedqueue.Queueable;
 import org.logstash.ext.JrubyTimestampExtLibrary;
@@ -417,8 +414,8 @@ public final class Event implements Cloneable, Queueable {
     public IRubyObject getRubyValue(Ruby runtime, FieldReference field) {
         switch (field.type()) {
             case FieldReference.META_PARENT:
-                this.metadata.rubyDeCow(runtime);
-                // TODO: This doesn't need a deep clone, everything is guaranteed to be an IRubyObject
+                this.metadata.rubyDeCow();
+                // We still need to handle non ruby-ified values
                 return Rubyfier.deep(runtime, this.metadata);
             case FieldReference.META_CHILD:
                 return Accessors.getRuby(runtime, metadata, field);

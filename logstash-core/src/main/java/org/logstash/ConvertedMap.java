@@ -135,37 +135,30 @@ public final class ConvertedMap extends IdentityHashMap<String, Object> {
         return FieldReference.from(key.getByteList()).getKey();
     }
 
-    void deCow(final FieldReference field) {
-        if (cowKeys == null) return;
-        String root = field.getRoot();
-        boolean removed = cowKeys.remove(root);
-        if (removed) {
-            FieldReference rootFieldRef = FieldReference.from(root);
-            Object original = get(rootFieldRef.getKey());
-            Object clone = Cloner.deep(original);
-            if (clone instanceof Map && !(clone instanceof ConvertedMap)) {
-                clone = ConvertedMap.newFromMap((Map<String, Object>) clone);
-            }
-            putInternedCowUnsafe(rootFieldRef.getKey(), clone);
-        }
-    }
+    boolean rubyDeCow(String field) {
+        if (cowKeys == null || !cowKeys.remove(field)) return false;
 
-    public boolean fieldIsCow(String field) {
-        return cowKeys.contains(field);
-    }
-
-    boolean rubyDeCow(Ruby runtime, String field) {
-        if (cowKeys == null || !cowKeys.contains(field)) return false;
-
-        IRubyObject cloned = Rubyfier.deepClone(runtime, get(field));
+        IRubyObject cloned = Rubyfier.deepClone(RubyUtil.RUBY, get(field));
         put(field, cloned);
 
         return true;
     }
 
-    public void rubyDeCow(Ruby runtime) {
+    public void rubyDeCow() {
         for (String key : cowKeys) {
-            rubyDeCow(runtime, key);
+            rubyDeCow(key);
         }
+    }
+
+    @Override
+    public Object remove(final Object key) {
+        if (!(key instanceof String)) return null;
+
+        // Sadly, we must decow the object first because the return value may be mutated
+        rubyDeCow((String) key);
+        Object v = get(key);
+        super.remove(key);
+
+        return v;
     }
 }

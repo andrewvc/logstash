@@ -10,11 +10,12 @@ public final class Accessors {
     }
 
     public static IRubyObject getRuby(final Ruby runtime, final ConvertedMap data, final FieldReference field) {
+        String root = field.getRoot();
+        boolean isCow = data.rubyDeCow(root);
+
         final Object target = findParent(data, field);
         if (target == null) return null;
-        String root = field.getRoot();
 
-        boolean isCow = data.rubyDeCow(runtime, root);
         if (isCow) {
             // No further conversions needed, we decowed to ruby
             // We are guaranteed to have an IRubyObject here
@@ -25,18 +26,19 @@ public final class Accessors {
     }
 
     public static Object get(final ConvertedMap data, final FieldReference field) {
+        data.rubyDeCow(field.getRoot());
         final Object target = findParent(data, field);
         return target == null ? null : fetch(target, field.getKey());
     }
 
     public static Object set(final ConvertedMap data, final FieldReference field,
         final Object value) {
-        data.deCow(field);
+        data.rubyDeCow(field.getRoot());
         return setChild(findCreateTarget(data, field), field.getKey(), value);
     }
 
     public static Object del(final ConvertedMap data, final FieldReference field) {
-        data.deCow(field);
+        data.rubyDeCow(field.getRoot());
         final Object target = findParent(data, field);
         if (target instanceof ConvertedMap) {
             return ((ConvertedMap) target).remove(field.getKey());
