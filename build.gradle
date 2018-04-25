@@ -124,8 +124,8 @@ clean {
   delete "${projectDir}/.bundle"
   delete "${projectDir}/qa/integration/Gemfile.lock"
   delete "${projectDir}/qa/integration/.bundle"
-  //delete "${projectDir}/build/licenseReportFolders.txt"
-  //delete "${projectDir}/build/rubyDependencies.csv"
+  delete "${projectDir}/build/licenseReportFolders.txt"
+  delete "${projectDir}/build/rubyDependencies.csv"
 }
 
 task bootstrap {}
