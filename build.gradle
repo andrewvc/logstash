@@ -90,7 +90,7 @@ subprojects {
 
     licenseReport {
         renderer = new com.github.jk1.license.render.CsvReportRenderer()
-        configurations = ALL
+        configurations = ['compile', 'runtime']
     }
 }
 
@@ -125,6 +125,7 @@ clean {
   delete "${projectDir}/qa/integration/Gemfile.lock"
   delete "${projectDir}/qa/integration/.bundle"
   delete "${projectDir}/build/licenseReportFolders.txt"
+  delete "${projectDir}/build/rubyDependencies.csv"
 }
 
 task bootstrap {}
@@ -306,7 +307,7 @@ task generateLicenseReport(type: JavaExec) {
     classpath = project.files([jarFile])
     main = "org.logstash.dependencies.Main"
     args \
-      "/home/dan/dev/logstash/tools/dependencies-report/src/test/resources/rubyDependencies.csv", \
+      project.getBuildDir().toString() + "/rubyDependencies.csv", \
       project.getBuildDir().toString() + "/licenseReportFolders.txt", \
       project.getBuildDir().toString() + "/dependencylicenseReport.csv"
 }
@@ -314,9 +315,9 @@ task generateLicenseReport(type: JavaExec) {
 task generateLicenseReportInputs() {
     dependsOn subprojects.generateLicenseReport
 
-    // write location of all subproject license reports to single file
+    // write location of all license reports for subprojects containing artifacts that are distributed to single file
     StringBuilder licenseReportFolders = new StringBuilder()
-    subprojects.each { s ->
+    subprojects.findAll { s1 -> !s1.hasProperty("isDistributedArtifact") || s1.property("isDistributedArtifact") == 'true'}.each { s ->
         s.tasks.findAll { t2 -> t2.getName() == "generateLicenseReport" }.each { t3 ->
             licenseReportFolders.append(t3.outputs.files.asPath + "\n")
         }
