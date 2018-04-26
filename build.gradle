@@ -323,13 +323,15 @@ task generateLicenseReportInputs() {
         }
     }
 
-    def licenseReportPath = project.getBuildDir().toString() + "/licenseReportFolders.txt"
-    def licenseReportFolder = new File(licenseReportPath)
-    licenseReportFolder.delete()
-    licenseReportFolder = new File(licenseReportPath)
-    licenseReportFolder.createNewFile()
-    if (licenseReportFolder.canWrite()) {
-        licenseReportFolder.text = licenseReportFolders.toString()
+    if (gradle.startParameter.taskNames.contains("generateLicenseReport")) {
+        def licenseReportPath = project.getBuildDir().toString() + "/licenseReportFolders.txt"
+        def licenseReportFolder = new File(licenseReportPath)
+        licenseReportFolder.delete()
+        licenseReportFolder = new File(licenseReportPath)
+        licenseReportFolder.createNewFile()
+        if (licenseReportFolder.canWrite()) {
+            licenseReportFolder.text = licenseReportFolders.toString()
+        }
     }
 }
 
