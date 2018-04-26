@@ -326,7 +326,11 @@ task generateLicenseReportInputs() {
     def licenseReportPath = project.getBuildDir().toString() + "/licenseReportFolders.txt"
     def licenseReportFolder = new File(licenseReportPath)
     licenseReportFolder.delete()
-    licenseReportFolder.text = licenseReportFolders.toString()
+    licenseReportFolder = new File(licenseReportPath)
+    licenseReportFolder.createNewFile()
+    if (licenseReportFolder.canWrite()) {
+        licenseReportFolder.text = licenseReportFolders.toString()
+    }
 }
 
 // If you are running a JRuby snapshot we will skip the integrity check.
