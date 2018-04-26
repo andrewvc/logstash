@@ -323,7 +323,9 @@ task generateLicenseReportInputs() {
         }
     }
 
-    def licenseReportFolder = new File(project.getBuildDir().toString() + "/licenseReportFolders.txt")
+    def licenseReportPath = project.getBuildDir().toString() + "/licenseReportFolders.txt"
+    def licenseReportFolder = new File(licenseReportPath)
+    licenseReportFolder.delete()
     licenseReportFolder.text = licenseReportFolders.toString()
 }
 
