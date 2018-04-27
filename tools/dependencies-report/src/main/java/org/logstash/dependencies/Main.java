@@ -31,7 +31,7 @@ public class Main {
         }
         FileWriter outputWriter = new FileWriter(args[2]);
 
-        new ReportGenerator().generateReport(
+        boolean reportResult = new ReportGenerator().generateReport(
                 getResourceAsStream(SPDX_LICENSES_PATH),
                 getResourceAsStream(LICENSE_OVERRIDES_PATH),
                 getResourceAsStream(LICENSE_SYNONYMS_PATH),
@@ -39,6 +39,9 @@ public class Main {
                 javaDependenciesStreams,
                 outputWriter
         );
+
+        // If there were unknown results in the report, exit with a non-zero status
+        System.exit(reportResult ? 0 : 1);
 
     }
 

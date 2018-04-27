@@ -10,6 +10,8 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.Reader;
 import java.io.Writer;
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Scanner;
@@ -27,8 +29,9 @@ import java.util.TreeSet;
 public class ReportGenerator {
 
     static final String UNKNOWN_LICENSE = "UNKNOWN";
+    static final Collection<Dependency> UNKNOWN_LICENSES = new ArrayList<Dependency>();
 
-    public void generateReport(
+    public boolean generateReport(
             InputStream spdxLicensesStream,
             InputStream licenseOverridesStream,
             InputStream licenseSynonymsStream,
@@ -43,7 +46,6 @@ public class ReportGenerator {
             readJavaDependenciesReport(stream, dependencies);
         }
 
-        int unknownLicenseCount = 0;
         Map<String, String> licenseOverrides = new HashMap<>();
         readLicenseOverrides(licenseOverridesStream, licenseOverrides);
         SpdxLicenseList spdxLicenseList = getSpdxLicenseList(spdxLicensesStream);
@@ -68,7 +70,7 @@ public class ReportGenerator {
             // mark unknown if none of the above
             if (dependency.spdxLicense == null || dependency.spdxLicense.equals("")) {
                 dependency.spdxLicense = UNKNOWN_LICENSE;
-                unknownLicenseCount++;
+                UNKNOWN_LICENSES.add(dependency);
             }
         }
 
@@ -81,8 +83,16 @@ public class ReportGenerator {
         }
 
         System.out.println(
-                String.format("Generated report with %d dependencies (%d unknown licenses)",
-                        dependencies.size(), unknownLicenseCount));
+                String.format("Generated report with %d dependencies (%d unknown licenses). Add licenses for the libraries listed below to" +
+                        "tools/dependencies-report/src/main/resources/licenseOverrides.csv",
+                        dependencies.size(), UNKNOWN_LICENSES.size()));
+
+        for (Dependency dependency : UNKNOWN_LICENSES) {
+            System.out.println(
+                String.format("\"%s:%s\"", dependency.name, dependency.version));
+        }
+
+        return UNKNOWN_LICENSES.size() == 0;
     }
 
     private SpdxLicenseList getSpdxLicenseList(InputStream spdxLicensesStream) throws IOException {

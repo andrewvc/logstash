@@ -51,8 +51,8 @@ class Dependency implements Comparable<Dependency> {
         d.name = nameAndVersion.substring(0, colonIndex);
         d.version = nameAndVersion.substring(colonIndex + 1);
 
-        d.license = record.get(2);
-        d.licenseUrl = record.get(3);
+        // We DON'T read the license info out of this CSV because it is not reliable, we want humans
+        // to use the overrides to ensure our license info is accurate
 
         return d;
     }
