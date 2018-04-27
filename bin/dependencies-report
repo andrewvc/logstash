@@ -32,5 +32,6 @@ setup
 SCRIPT=$(readlink -f "$0")
 SCRIPTPATH=$(dirname "$SCRIPT")
 
-ruby_exec "logstash-core/lib/logstash/dependency_report_runner.rb" "--csv" "$SCRIPTPATH/../build/rubyDependencies.csv"
-$SCRIPTPATH/../gradlew generateLicenseReport
+
+mkdir -p build
+ruby_exec "logstash-core/lib/logstash/dependency_report_runner.rb" "$@"

@@ -304,12 +304,15 @@ task generateLicenseReport(type: JavaExec) {
 
     def jarFile = project('dependencies-report').getBuildDir().toString() + "/libs/dependencies-report.jar"
 
+    String licenseReportInputCSV = project.hasProperty("licenseReportInputCSV") ? project.property("licenseReportInputCSV") : "build/dependencies.csv.ruby"
+    String licenseReportOutputCSV = project.hasProperty("licenseReportOutputCSV") ? project.property("licenseReportOutputCSV") : "build/dependencies.csv"
+
     classpath = project.files([jarFile])
     main = "org.logstash.dependencies.Main"
     args \
-      project.getBuildDir().toString() + "/rubyDependencies.csv", \
+      licenseReportInputCSV, \
       project.getBuildDir().toString() + "/licenseReportFolders.txt", \
-      project.getBuildDir().toString() + "/dependencylicenseReport.csv"
+      licenseReportOutputCSV
 }
 
 task generateLicenseReportInputs() {
