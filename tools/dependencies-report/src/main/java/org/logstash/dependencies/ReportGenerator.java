@@ -9,6 +9,9 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.Reader;
 import java.io.Writer;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
@@ -30,13 +33,15 @@ public class ReportGenerator {
     final String UNKNOWN_LICENSE = "UNKNOWN";
     final Collection<Dependency> UNKNOWN_LICENSES = new ArrayList<Dependency>();
     final String[] CSV_HEADERS = {"name", "version", "revision", "url", "license", "copyright"};
+    final Collection<Dependency> MISSING_NOTICE = new ArrayList<Dependency>();
 
     public boolean generateReport(
             InputStream licenseMappingStream,
             InputStream acceptableLicensesStream,
             InputStream rubyDependenciesStream,
             InputStream[] javaDependenciesStreams,
-            Writer output) throws IOException {
+            Writer output,
+            Writer noticeOutput) throws IOException {
 
         SortedSet<Dependency> dependencies = new TreeSet<>();
         Dependency.addDependenciesFromRubyReport(rubyDependenciesStream, dependencies);
@@ -66,7 +71,18 @@ public class ReportGenerator {
                 dependency.spdxLicense = UNKNOWN_LICENSE;
                 UNKNOWN_LICENSES.add(dependency);
             }
+
+            System.out.println("NOTICEWRITE" + dependency.noticePath());
+            if (Files.exists(dependency.noticePath())) {
+                String notice = new String(Files.readAllBytes(dependency.noticePath()));
+                noticeOutput.write(String.format("\n==========\n%s-%s\n----------", dependency.name, dependency.version));
+                noticeOutput.write(notice);
+            } else {
+                MISSING_NOTICE.add(dependency);
+            }
         }
+
+        noticeOutput.close();
 
         try (CSVPrinter csvPrinter = new CSVPrinter(output,
                 CSVFormat.DEFAULT.withHeader(CSV_HEADERS))) {
@@ -79,7 +95,7 @@ public class ReportGenerator {
         String msg = "Generated report with %d dependencies (%d unknown or unacceptable licenses).";
         System.out.println(String.format(msg + "\n", dependencies.size(), UNKNOWN_LICENSES.size()));
 
-        if (UNKNOWN_LICENSES.size() > 0) {
+        if (!UNKNOWN_LICENSES.isEmpty()) {
             String errMsg =
                 "Add complying licenses (using the SPDX license ID from https://spdx.org/licenses) " +
                 "with URLs for the libraries listed below to tools/dependencies-report/src/main/resources/" +
@@ -91,7 +107,14 @@ public class ReportGenerator {
             }
         }
 
-        return UNKNOWN_LICENSES.size() == 0;
+        if (!MISSING_NOTICE.isEmpty()) {
+            System.out.println("The following NOTICE.txt entries are missing, please add them:");
+            for (Dependency dependency : MISSING_NOTICE) {
+                System.out.println(dependency.noticeSourcePath());
+            }
+        }
+
+        return UNKNOWN_LICENSES.isEmpty() && MISSING_NOTICE.isEmpty();
     }
 
     private void readAcceptableLicenses(InputStream stream, List<String> acceptableLicenses)

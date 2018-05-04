@@ -7,6 +7,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.Reader;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.Objects;
 import java.util.SortedSet;
 
@@ -106,5 +108,21 @@ class Dependency implements Comparable<Dependency> {
     @Override
     public int compareTo(Dependency o) {
         return (name + version).compareTo(o.name + o.version);
+    }
+
+    public String noticeSourcePath() {
+        return "LS_HOME/tools/dependencies-report/src/main/resources/notices/" + noticeFilename();
+    }
+
+    public String noticeFilename() {
+        return String.format("%s-%s-NOTICE.txt", name, version != null ? version : "NOVERSION");
+    }
+
+    public Path noticePath() {
+        // Get the base first since this always exists, otherwise getResource will return null if its for a notice
+        // that doesn't exist
+        String noticesBase = ReportGenerator.class.getResource("/notices").getPath();
+        Path path = Paths.get(noticesBase, noticeFilename());
+        return path;
     }
 }
