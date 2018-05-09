@@ -1,7 +1,5 @@
 package org.logstash.dependencies;
 
-import com.sun.xml.internal.ws.policy.privateutil.PolicyUtils;
-import org.hamcrest.core.StringContains;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -11,7 +9,6 @@ import java.io.StringWriter;
 import java.util.Optional;
 import java.util.Scanner;
 
-import static com.sun.jmx.snmp.ThreadContext.contains;
 import static org.hamcrest.CoreMatchers.containsString;
 import static org.hamcrest.CoreMatchers.not;
 import static org.junit.Assert.*;
@@ -33,10 +30,13 @@ public class ReportGeneratorTest {
     public void testSuccessfulReport() throws IOException {
         String expectedOutput = getStringFromStream(
                 Main.getResourceAsStream("/expectedOutput.txt"));
+        String expectedNoticeOutput = getStringFromStream(
+                Main.getResourceAsStream("/expectedNoticeOutput.txt"));
         boolean result = runReportGenerator("/licenseMapping-good.csv", csvOutput, noticeOutput);
 
         assertTrue(result);
         assertEquals(normalizeEol(expectedOutput), normalizeEol(csvOutput.toString()));
+        assertEquals(normalizeEol(expectedNoticeOutput), normalizeEol(noticeOutput.toString()));
     }
 
     @Test
