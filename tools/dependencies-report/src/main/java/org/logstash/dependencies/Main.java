@@ -30,19 +30,16 @@ public class Main {
         for (int k = 0; k < javaDependencyReports.size(); k++) {
             javaDependenciesStreams[k] = new FileInputStream(javaDependencyReports.get(k) + "/licenses.csv");
         }
-        FileWriter outputWriter = new FileWriter(args[2]);
-        Path noticePath = Paths.get(args[3]);
-
-        // Delete existing NOTICE.txt since we'll be replacing it
-        Files.delete(noticePath);
+        FileWriter licenseCSVWriter = new FileWriter(args[2]);
+        FileWriter noticeWriter = new FileWriter(args[3]);
 
         boolean reportResult = new ReportGenerator().generateReport(
                 getResourceAsStream(LICENSE_MAPPING_PATH),
                 getResourceAsStream(ACCEPTABLE_LICENSES_PATH),
                 rubyDependenciesStream,
                 javaDependenciesStreams,
-                outputWriter,
-                Files.newBufferedWriter(noticePath)
+                licenseCSVWriter,
+                noticeWriter
         );
 
         // If there were unknown results in the report, exit with a non-zero status
