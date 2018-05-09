@@ -78,8 +78,9 @@ class Dependency implements Comparable<Dependency> {
             throw new IllegalStateException(err);
         }
         colonIndex = nameAndVersion.indexOf(':', colonIndex + 1);
-        if (colonIndex == -1) {
-            String err = String.format("Could not parse java artifact name and version from '%s'",
+        String[] split = nameAndVersion.split(":");
+        if (split.length != 3) {
+            String err = String.format("Could not parse java artifact name and version from '%s', must be of the form group:name:version",
                     nameAndVersion);
             throw new IllegalStateException(err);
         }
@@ -131,7 +132,6 @@ class Dependency implements Comparable<Dependency> {
     }
 
     public boolean noticeExists() {
-        System.out.println("NOTICE CHECK FOR " + resourceName() + " > " + noticeURL());
         return noticeURL() != null;
     }
 
@@ -149,5 +149,18 @@ class Dependency implements Comparable<Dependency> {
         String noticesBase = ReportGenerator.class.getResource("/notices").getPath();
         Path path = Paths.get(noticesBase, noticeFilename());
         return path;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public String getVersion() {
+        return version;
+    }
+
+    @Override
+    public String toString() {
+        return "<Dependency " + name + " v" + version + ">";
     }
 }

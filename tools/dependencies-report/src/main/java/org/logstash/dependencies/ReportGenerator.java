@@ -33,7 +33,7 @@ public class ReportGenerator {
     final String UNKNOWN_LICENSE = "UNKNOWN";
     final Collection<Dependency> UNKNOWN_LICENSES = new ArrayList<Dependency>();
     final String[] CSV_HEADERS = {"name", "version", "revision", "url", "license", "copyright"};
-    final Collection<Dependency> MISSING_NOTICE = new ArrayList<Dependency>();
+    public final Collection<Dependency> MISSING_NOTICE = new ArrayList<Dependency>();
 
     public boolean generateReport(
             InputStream licenseMappingStream,
@@ -74,9 +74,14 @@ public class ReportGenerator {
 
             if (dependency.noticeExists()) {
                 String notice = dependency.notice();
-                System.out.println("NOTICEWRITE" + dependency.noticePath());
-                noticeOutput.write(String.format("\n==========\nNotice for: %s-%s\n----------\n\n", dependency.name, dependency.version));
-                noticeOutput.write(notice);
+
+                boolean noticeIsBlank = notice.matches("\\A\\s*\\Z");
+                if (!noticeIsBlank) {
+                    noticeOutput.write(String.format("\n==========\nNotice for: %s-%s\n----------\n\n", dependency.name, dependency.version));
+                    noticeOutput.write(notice);
+                } else {
+                    MISSING_NOTICE.add(dependency);
+                }
             } else {
                 MISSING_NOTICE.add(dependency);
             }
