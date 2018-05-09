@@ -3,13 +3,17 @@ package org.logstash.dependencies;
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVRecord;
 
+import java.io.BufferedReader;
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.Reader;
+import java.net.URL;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Objects;
+import java.util.Scanner;
 import java.util.SortedSet;
 
 class Dependency implements Comparable<Dependency> {
@@ -116,6 +120,27 @@ class Dependency implements Comparable<Dependency> {
 
     public String noticeFilename() {
         return String.format("%s-%s-NOTICE.txt", name, version != null ? version : "NOVERSION");
+    }
+
+    public String resourceName() {
+        return "/notices/" + noticeFilename();
+    }
+
+    public URL noticeURL() {
+        return Dependency.class.getResource(resourceName());
+    }
+
+    public boolean noticeExists() {
+        System.out.println("NOTICE CHECK FOR " + resourceName() + " > " + noticeURL());
+        return noticeURL() != null;
+    }
+
+    public String notice() throws IOException {
+       if (!noticeExists()) throw new IOException(String.format("No notice file found at '%s'", noticeFilename()));
+
+       try (InputStream noticeStream = Dependency.class.getResourceAsStream(resourceName())) {
+            return new Scanner(noticeStream, "UTF-8").useDelimiter("\\A").next();
+       }
     }
 
     public Path noticePath() {

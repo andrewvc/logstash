@@ -72,10 +72,10 @@ public class ReportGenerator {
                 UNKNOWN_LICENSES.add(dependency);
             }
 
-            System.out.println("NOTICEWRITE" + dependency.noticePath());
-            if (Files.exists(dependency.noticePath())) {
-                String notice = new String(Files.readAllBytes(dependency.noticePath()));
-                noticeOutput.write(String.format("\n==========\n%s-%s\n----------", dependency.name, dependency.version));
+            if (dependency.noticeExists()) {
+                String notice = dependency.notice();
+                System.out.println("NOTICEWRITE" + dependency.noticePath());
+                noticeOutput.write(String.format("\n==========\nNotice for: %s-%s\n----------\n\n", dependency.name, dependency.version));
                 noticeOutput.write(notice);
             } else {
                 MISSING_NOTICE.add(dependency);
