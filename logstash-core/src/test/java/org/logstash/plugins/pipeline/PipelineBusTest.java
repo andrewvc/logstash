@@ -56,7 +56,7 @@ public class PipelineBusTest {
     public void activeSenderPreventsPrune() {
         bus.registerSender(output, addresses);
         bus.listen(input, address);
-        bus.unlisten(input, address);
+        bus.forceUnlisten(input, address);
 
         assertThat(bus.addressStates.containsKey(address)).isTrue();
         bus.unregisterSender(output, addresses);

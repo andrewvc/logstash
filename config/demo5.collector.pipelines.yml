@@ -7,31 +7,32 @@
       }
     }
     output {
-      pipeline { send_to => [process_lower, process_upper] }
+      pipeline { send_to => common }
     }
-- pipeline.id: lower
+- pipeline.id: udp_ingestion
+  queue.type: persisted
   config.string: |
     input {
-      pipeline { address => process_lower }
+      udp {
+        port => 54321
+        codec => json_lines
+      }
+    }
+    output {
+      pipeline {  send_to => common }
+    }
+- pipeline.id: common_out
+  config.string: |
+    input {
+      pipeline { address => common }
     }
     filter {
-      mutate { lowercase => message }
+      mutate { add_field => { processed_by => logstash } }
     }
     output {
       stdout { codec => json_lines }
+      elasticsearch {}
     }
-- pipeline.id: upper
-  config.string: |
-    input {
-      pipeline { address => process_upper }
-    }
-    filter {
-      mutate { uppercase => message }
-    }
-    output {
-      stdout { codec => json_lines }
-    }
-
 
 # List of pipelines to be loaded by Logstash
 #

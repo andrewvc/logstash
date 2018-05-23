@@ -7,31 +7,34 @@
       }
     }
     output {
-      pipeline { send_to => [process_lower, process_upper] }
+      if [zone] == "A" {
+        pipeline { send_to => zoneAIngress }
+      } else if [zone] == "B" {
+        pipeline { send_to => zoneBIngress }
+      }
     }
-- pipeline.id: lower
+- pipeline.id: za_in
   config.string: |
     input {
-      pipeline { address => process_lower }
+      pipeline { address => zoneAIngress }
     }
     filter {
-      mutate { lowercase => message }
+      mutate { add_field => { processedBy => za_in } }
     }
     output {
       stdout { codec => json_lines }
     }
-- pipeline.id: upper
+- pipeline.id: zb_in
   config.string: |
     input {
-      pipeline { address => process_upper }
+      pipeline { address => zoneBIngress }
     }
     filter {
-      mutate { uppercase => message }
+      mutate { add_field => { processedBy => zb_in } }
     }
     output {
       stdout { codec => json_lines }
     }
-
 
 # List of pipelines to be loaded by Logstash
 #

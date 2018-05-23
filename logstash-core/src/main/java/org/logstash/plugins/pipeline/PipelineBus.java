@@ -13,8 +13,7 @@ import java.util.stream.Stream;
  * This class is essentially the communication bus / central state for the `pipeline` inputs/outputs to talk to each
  * other.
  *
- * This class is threadsafe. Most method locking is coarse grained with `synchronized` since contention for all these methods
- * shouldn't matter
+ * This class is threadsafe.
  */
 public class PipelineBus {
     final HashMap<String, AddressState> addressStates = new HashMap<>();
@@ -64,10 +63,14 @@ public class PipelineBus {
      * @param output
      * @param addresses
      */
-    public synchronized void registerSender(final PipelineOutput output, final Iterable<String> addresses) {
+    public void registerSender(final PipelineOutput output, final Iterable<String> addresses) {
         addresses.forEach((String address) -> {
-            final AddressState state = addressStates.computeIfAbsent(address, AddressState::new);
-            state.addOutput(output);
+            addressStates.compute(address, (k, value) -> {
+               final AddressState state = value != null ? value : new AddressState(address);
+               state.addOutput(output);
+
+               return state;
+            });
         });
 
         updateOutputReceivers(output);
@@ -78,13 +81,15 @@ public class PipelineBus {
      * @param output output that will be unregistered
      * @param addresses collection of addresses this sender was registered with
      */
-    public synchronized void unregisterSender(final PipelineOutput output, final Iterable<String> addresses) {
+    public void unregisterSender(final PipelineOutput output, final Iterable<String> addresses) {
         addresses.forEach(address -> {
-            final AddressState state = addressStates.get(address);
-            if (state != null) {
+            addressStates.computeIfPresent(address, (k, state) -> {
                 state.removeOutput(output);
-                if (state.isEmpty()) addressStates.remove(address);
-            }
+
+                if (state.isEmpty()) return null;
+
+                return state;
+            });
         });
 
         outputsToAddressStates.remove(output);
@@ -95,12 +100,15 @@ public class PipelineBus {
      * in the inputs receiving events from it.
      * @param output
      */
-    private synchronized void updateOutputReceivers(final PipelineOutput output) {
-        ConcurrentHashMap<String, AddressState> outputAddressToInputMapping =
-                outputsToAddressStates.computeIfAbsent(output, o -> new ConcurrentHashMap<>());
+    private void updateOutputReceivers(final PipelineOutput output) {
+        outputsToAddressStates.compute(output, (k, value) -> {
+            ConcurrentHashMap<String, AddressState> outputAddressToInputMapping = value != null ? value : new ConcurrentHashMap<>();
 
-        addressStates.forEach( (address, state) -> {
-            if (state.hasOutput(output)) outputAddressToInputMapping.put(address, state);
+            addressStates.forEach( (address, state) -> {
+                if (state.hasOutput(output)) outputAddressToInputMapping.put(address, state);
+            });
+
+            return outputAddressToInputMapping;
         });
     }
 
@@ -111,13 +119,23 @@ public class PipelineBus {
      * @param input
      * @return true if the listener successfully subscribed
      */
-    public synchronized boolean listen(final PipelineInput input, final String address) {
-        final AddressState state = addressStates.computeIfAbsent(address, AddressState::new);
-        if (state.assignInputIfMissing(input)) {
-            state.getOutputs().forEach(this::updateOutputReceivers);
-            return true;
-        }
-        return false;
+    public boolean listen(final PipelineInput input, final String address) {
+        final boolean[] result = new boolean[1];
+
+        addressStates.compute(address, (k, value) -> {
+           AddressState state = value != null ? value : new AddressState(address);
+
+            if (state.assignInputIfMissing(input)) {
+                state.getOutputs().forEach(this::updateOutputReceivers);
+                result[0] = true;
+            }
+
+            result[0] = false;
+
+            return state;
+        });
+
+        return result[0];
     }
 
     /**
@@ -125,12 +143,42 @@ public class PipelineBus {
      * @param address
      * @param input
      */
-    public synchronized void unlisten(final PipelineInput input, final String address) {
-        final AddressState state = addressStates.get(address);
-        if (state != null) {
-            state.unassignInput(input);
-            if (state.isEmpty()) addressStates.remove(address);
-            state.getOutputs().forEach(this::updateOutputReceivers);
+    public void unlisten(final PipelineInput input, final String address) {
+        final boolean[] waiting = {true};
+
+        // Block until all senders are done
+        // Outputs shutdown before their connected inputs
+        while (waiting[0]) {
+            addressStates.compute(address, (k, state) -> {
+                // If this happens the pipeline was asked to shutdown
+                // twice, so there's no work to do
+                if (state == null) {
+                    waiting[0] = false;
+                    return null;
+                }
+
+                if (state.getOutputs().isEmpty()) {
+                    state.unassignInput(input);
+
+                    waiting[0] = false;
+                    return null;
+                }
+
+                return state;
+            });
         }
+    }
+
+    /**
+     * Unlisten to use during reloads. This lets upstream outputs block while this input is missing
+     * @param input
+     * @param address
+     */
+    public void forceUnlisten(final PipelineInput input, final String address) {
+        addressStates.computeIfPresent(address, (k, state) -> {
+           state.unassignInput(input);
+           state.getOutputs().forEach(this::updateOutputReceivers);
+           return state;
+        });
     }
 }
