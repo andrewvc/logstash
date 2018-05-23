@@ -113,6 +113,12 @@ public class PipelineBusTest {
     }
 
     @Test
+    public void sendingEmptyListToNowhereStillReturns() {
+        bus.registerSender(output, Arrays.asList("not_an_address"));
+        bus.sendEvents(output, Collections.emptyList(), true);
+    }
+
+    @Test
     public void missingInputEventuallySucceeds() throws InterruptedException {
         bus.registerSender(output, addresses);
 

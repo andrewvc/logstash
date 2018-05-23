@@ -31,6 +31,8 @@ public class PipelineBus {
     public void sendEvents(final PipelineOutput sender,
                           final Collection<JrubyEventExtLibrary.RubyEvent> events,
                           final boolean ensureDelivery) {
+        if (events.isEmpty()) return; // This can happen on pipeline shutdown or in some other situations
+
         final ConcurrentHashMap<String, AddressState> addressesToInputs = outputsToAddressStates.get(sender);
 
         addressesToInputs.forEach( (address, addressState) -> {
