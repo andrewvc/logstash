@@ -7,6 +7,7 @@ import org.logstash.ext.JrubyEventExtLibrary;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Stream;
 
 /**
@@ -17,9 +18,9 @@ import java.util.stream.Stream;
  */
 public class PipelineBus {
     final HashMap<String, AddressState> addressStates = new HashMap<>();
-    ConcurrentHashMap<PipelineOutput, ConcurrentHashMap<String, AddressState>> outputsToAddressStates = new ConcurrentHashMap<>();
-
-    private static final Logger logger = LogManager.getLogger(PipelineBus.class);
+    final ConcurrentHashMap<PipelineOutput, ConcurrentHashMap<String, AddressState>> outputsToAddressStates = new ConcurrentHashMap<>();
+    volatile boolean blockOnUnlisten = false;
+   private static final Logger logger = LogManager.getLogger(PipelineBus.class);
 
     /**
      * Sends events from the provided output.
@@ -128,9 +129,9 @@ public class PipelineBus {
             if (state.assignInputIfMissing(input)) {
                 state.getOutputs().forEach(this::updateOutputReceivers);
                 result[0] = true;
+            } else {
+                result[0] = false;
             }
-
-            result[0] = false;
 
             return state;
         });
@@ -139,16 +140,31 @@ public class PipelineBus {
     }
 
     /**
+     * Stop listening on the given address with the given listener
+     * Will change behavior depending on whether {@link #isBlockOnUnlisten()} is true or not.
+     * Will call a blocking method if it is, a non-blocking one if it isn't
+     * @param input
+     * @param address
+     */
+    public void unlisten(final PipelineInput input, final String address) throws InterruptedException {
+        if (isBlockOnUnlisten()) {
+            unlistenBlock(input, address);
+        } else {
+            unlistenNonblock(input, address);
+        }
+    }
+
+    /**
      * Stop listing on the given address with the given listener
      * @param address
      * @param input
      */
-    public void unlisten(final PipelineInput input, final String address) {
+    public void unlistenBlock(final PipelineInput input, final String address) throws InterruptedException {
         final boolean[] waiting = {true};
 
         // Block until all senders are done
         // Outputs shutdown before their connected inputs
-        while (waiting[0]) {
+        while (true) {
             addressStates.compute(address, (k, state) -> {
                 // If this happens the pipeline was asked to shutdown
                 // twice, so there's no work to do
@@ -166,6 +182,12 @@ public class PipelineBus {
 
                 return state;
             });
+
+            if (waiting[0] == false) {
+                break;
+            } else {
+                Thread.sleep(100);
+            }
         }
     }
 
@@ -174,11 +196,21 @@ public class PipelineBus {
      * @param input
      * @param address
      */
-    public void forceUnlisten(final PipelineInput input, final String address) {
+    public void unlistenNonblock(final PipelineInput input, final String address) {
         addressStates.computeIfPresent(address, (k, state) -> {
            state.unassignInput(input);
            state.getOutputs().forEach(this::updateOutputReceivers);
-           return state;
+           return state.isEmpty() ? null : state;
         });
     }
+
+    public boolean isBlockOnUnlisten() {
+        return blockOnUnlisten;
+    }
+
+    public void setBlockOnUnlisten(boolean blockOnUnlisten) {
+        this.blockOnUnlisten = blockOnUnlisten;
+    }
+
+
 }
