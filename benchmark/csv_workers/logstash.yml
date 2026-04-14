@@ -1,0 +1,6 @@
+# Minimal settings for the CSV workers benchmark.
+# pipeline.workers is set per-run via the -w CLI flag.
+config.reload.automatic: false
+log.level: warn
+# Use a high port range to avoid conflicts with any running Logstash instance.
+api.http.port: 9650-9700
